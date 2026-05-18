@@ -1,566 +1,1395 @@
+-- TABLAS PRINCIPALES (Catálogos y Entidades Independientes)
 CREATE TABLE categorias (
-    id_categoria  SERIAL PRIMARY KEY,
-    nombre        VARCHAR(50) UNIQUE NOT NULL
-);
-
-CREATE TABLE productos (
-    id_producto            SERIAL PRIMARY KEY,
-    codigo_producto        BIGINT UNIQUE,
-    descripcion_producto   TEXT NOT NULL,
-    precio                 DECIMAL(10,2),
-    id_categoria           INT REFERENCES categorias(id_categoria),
-    nombre_local           VARCHAR(100) DEFAULT 'GESA',
-    tipo_producto          VARCHAR(50),
-    estado_nivel_compania  VARCHAR(50)
-);
-
-CREATE TABLE inventario (
-    id_producto  INT PRIMARY KEY REFERENCES productos(id_producto),
-    stock        INT NOT NULL DEFAULT 0
-);
-
-CREATE TABLE empleados (
-    id_empleado      SERIAL PRIMARY KEY,
-    dni              CHAR(8) UNIQUE NOT NULL CHECK (dni ~ '^[0-9]{8}$'),
-    nombre           VARCHAR(50) NOT NULL,
-    apellido         VARCHAR(50) NOT NULL,
-    fecha_nacimiento DATE,
-    cargo            VARCHAR(50)
-);
-
-CREATE TABLE usuarios (
-    id_usuario     SERIAL PRIMARY KEY,
-    username       VARCHAR(50) UNIQUE NOT NULL,
-    password_hash  VARCHAR(255) NOT NULL,
-    id_empleado    INT REFERENCES empleados(id_empleado) ON DELETE SET NULL,
-    rol            VARCHAR(20) NOT NULL CHECK (rol IN ('admin', 'empleado'))
+    id_categoria SERIAL PRIMARY KEY,
+    nombre VARCHAR(50) UNIQUE NOT NULL
 );
 
 CREATE TABLE proveedores (
-    id_proveedor  SERIAL PRIMARY KEY,
-    nombre        VARCHAR(100),
-    telefono      VARCHAR(15)
+    id_proveedor SERIAL PRIMARY KEY,
+    nombre VARCHAR(100),
+    telefono VARCHAR(15)
 );
 
 CREATE TABLE metodo_pago (
-    id_metodo  SERIAL PRIMARY KEY,
-    tipo       VARCHAR(30)
+    id_metodo SERIAL PRIMARY KEY,
+    tipo VARCHAR(30)
 );
 
 CREATE TABLE sucursales (
-    id_sucursal  SERIAL PRIMARY KEY,
-    nombre       VARCHAR(100),
-    direccion    TEXT
+    id_sucursal SERIAL PRIMARY KEY,
+    nombre VARCHAR(100),
+    direccion TEXT
+);
+
+-- 3FN: Eliminación de nombre_local, tipo_producto y estado_nivel_compania
+CREATE TABLE productos (
+    id_producto SERIAL PRIMARY KEY,
+    codigo_producto BIGINT UNIQUE,
+    descripcion_producto TEXT NOT NULL,
+    precio DECIMAL(10,2),
+    id_categoria INT REFERENCES categorias(id_categoria)
+);
+
+-- Se mantiene la tabla según la lógica preestablecida
+CREATE TABLE inventario (
+    id_producto INT PRIMARY KEY REFERENCES productos(id_producto),
+    stock INT NOT NULL DEFAULT 0
 );
 
 CREATE TABLE producto_sucursal (
-    id_ps        SERIAL PRIMARY KEY,
-    id_producto  INT REFERENCES productos(id_producto),
-    id_sucursal  INT REFERENCES sucursales(id_sucursal),
-    stock        INT NOT NULL
+    id_ps SERIAL PRIMARY KEY,
+    id_producto INT REFERENCES productos(id_producto),
+    id_sucursal INT REFERENCES sucursales(id_sucursal),
+    stock INT NOT NULL
 );
 
+CREATE TABLE empleados (
+    id_empleado SERIAL PRIMARY KEY,
+    dni CHAR(8) UNIQUE NOT NULL CHECK (dni ~ '^[0-9]{8}$'),
+    nombre VARCHAR(50) NOT NULL,
+    apellido VARCHAR(50) NOT NULL,
+    fecha_nacimiento DATE,
+    cargo VARCHAR(50)
+);
+
+CREATE TABLE usuarios (
+    id_usuario SERIAL PRIMARY KEY,
+    username VARCHAR(50) UNIQUE NOT NULL,
+    password_hash VARCHAR(255) NOT NULL,
+    id_empleado INT REFERENCES empleados(id_empleado) ON DELETE SET NULL,
+    rol VARCHAR(20) NOT NULL CHECK (rol IN ('admin', 'empleado'))
+);
+
+-- 1FN: Se elimina la columna telefono para evitar valores múltiples
 CREATE TABLE clientes (
-    id_cliente  SERIAL PRIMARY KEY,
-    nombre      VARCHAR(50),
-    apellido    VARCHAR(50),
-    telefono    VARCHAR(15)
+    id_cliente SERIAL PRIMARY KEY,
+    nombre VARCHAR(50),
+    apellido VARCHAR(50)
 );
 
+-- 1FN: Nueva tabla para normalizar los teléfonos de los clientes
+CREATE TABLE cliente_telefonos (
+    id_telefono SERIAL PRIMARY KEY,
+    id_cliente INT REFERENCES clientes(id_cliente) ON DELETE CASCADE,
+    telefono VARCHAR(15) NOT NULL
+);
+
+-- TABLAS TRANSACCIONALES
 CREATE TABLE ventas (
-    id_venta    SERIAL PRIMARY KEY,
-    id_cliente  INT REFERENCES clientes(id_cliente),
+    id_venta SERIAL PRIMARY KEY,
+    id_cliente INT REFERENCES clientes(id_cliente),
     id_empleado INT REFERENCES empleados(id_empleado),
-    fecha       DATE DEFAULT CURRENT_DATE
+    fecha DATE DEFAULT CURRENT_DATE
 );
 
 CREATE TABLE detalle_venta (
-    id_detalle      SERIAL PRIMARY KEY,
-    id_venta        INT REFERENCES ventas(id_venta),
-    id_producto     INT REFERENCES productos(id_producto),
-    cantidad        INT NOT NULL,
+    id_detalle SERIAL PRIMARY KEY,
+    id_venta INT REFERENCES ventas(id_venta),
+    id_producto INT REFERENCES productos(id_producto),
+    cantidad INT NOT NULL,
     precio_unitario DECIMAL(10,2) NOT NULL
 );
 
 CREATE TABLE pagos (
-    id_pago    SERIAL PRIMARY KEY,
-    id_venta   INT REFERENCES ventas(id_venta),
-    id_metodo  INT REFERENCES metodo_pago(id_metodo),
-    monto      DECIMAL(10,2) NOT NULL
+    id_pago SERIAL PRIMARY KEY,
+    id_venta INT REFERENCES ventas(id_venta),
+    id_metodo INT REFERENCES metodo_pago(id_metodo),
+    monto DECIMAL(10,2) NOT NULL
 );
 
 CREATE TABLE compras (
-    id_compra    SERIAL PRIMARY KEY,
+    id_compra SERIAL PRIMARY KEY,
     id_proveedor INT REFERENCES proveedores(id_proveedor),
-    id_empleado  INT REFERENCES empleados(id_empleado),
-    fecha        DATE DEFAULT CURRENT_DATE
+    id_empleado INT REFERENCES empleados(id_empleado),
+    fecha DATE DEFAULT CURRENT_DATE
 );
 
 CREATE TABLE detalle_compra (
-    id_detalle     SERIAL PRIMARY KEY,
-    id_compra      INT REFERENCES compras(id_compra),
-    id_producto    INT REFERENCES productos(id_producto),
-    cantidad       INT NOT NULL,
+    id_detalle SERIAL PRIMARY KEY,
+    id_compra INT REFERENCES compras(id_compra),
+    id_producto INT REFERENCES productos(id_producto),
+    cantidad INT NOT NULL,
     costo_unitario DECIMAL(10,2) NOT NULL
 );
 
-
-CREATE OR REPLACE VIEW v_productos AS
-SELECT
-    p.id_producto,
-    p.codigo_producto,
-    p.descripcion_producto,
-    c.nombre               AS categoria,
-    p.precio,
-    COALESCE(i.stock, 0)   AS stock,
-    p.nombre_local,
-    p.tipo_producto,
-    p.estado_nivel_compania
-FROM  productos  p
-LEFT JOIN categorias c ON c.id_categoria = p.id_categoria
-LEFT JOIN inventario i ON i.id_producto  = p.id_producto;
-
-CREATE OR REPLACE VIEW v_detalle_ventas AS
-SELECT
-    v.id_venta,
-    v.fecha,
-    cl.nombre || ' ' || cl.apellido   AS cliente,
-    e.nombre  || ' ' || e.apellido    AS empleado,
-    p.descripcion_producto             AS producto,
-    cat.nombre                         AS categoria,
-    dv.cantidad,
-    dv.precio_unitario,
-    (dv.cantidad * dv.precio_unitario) AS subtotal
-FROM  ventas v
-JOIN  clientes    cl  ON cl.id_cliente  = v.id_cliente
-JOIN  empleados   e   ON e.id_empleado  = v.id_empleado
-JOIN  detalle_venta dv ON dv.id_venta   = v.id_venta
-JOIN  productos   p   ON p.id_producto  = dv.id_producto
-LEFT JOIN categorias cat ON cat.id_categoria = p.id_categoria;
-
-
+-- ==========================================
+-- INSERCIONES DE DATOS
+-- ==========================================
 
 INSERT INTO categorias (nombre) VALUES
-('BEBIDAS'),
-('COMESTIBLES'),
-('CONFITERÍA'),
-('PIQUEOS'),
-('LIMPIEZA');
+('BEBIDAS'), ('COMESTIBLES'), ('CONFITERÍA'), ('PIQUEOS'), ('LIMPIEZA');
 
 INSERT INTO metodo_pago (tipo) VALUES
-('Efectivo'),
-('Yape / Plin'),
-('Tarjeta de crédito'),
-('Tarjeta de débito');
+('Efectivo'), ('Yape / Plin'), ('Tarjeta de crédito'), ('Tarjeta de débito');
 
 INSERT INTO sucursales (nombre, direccion) VALUES
 ('GESA - Local Principal', 'Calle Real, Breña - Centro');
 
 INSERT INTO proveedores (nombre, telefono) VALUES
-('Distribuidora Alicorp', '972401846'),
-('Gloria S.A.',           '906288892'),
-('Arcor',                 '999333333'),
-('Nestlé Perú',           '999444444');
-
---  PRODUCTOS — BEBIDAS 
-
-
-INSERT INTO productos (codigo_producto, descripcion_producto, id_categoria, precio) VALUES
-(20463256, 'SCALA AGUA SIN GAS CJ 20L',                    1, 18.50),
-(20463251, 'SCALA AGUA SIN GAS BD 7L',                     1,  8.90),
-(20463254, 'SCALA AGUA SIN GAS BT 1 L',                    1,  2.50),
-(20463255, 'SCALA AGUA SIN GAS BT 2.5 L',                  1,  4.20),
-(20119837, 'SAN CARLOS AGUA S/GAS BT 3 L',                 1,  5.50),
-(20173636, 'SAN CARLOS AGUA S/GAS PK 20 BT 500 ML',        1, 23.00),
-(737791,   'SAN MATEO AGUA MINERAL C/GAS BT 600 ML',       1,  2.80),
-(830010,   'SAN MATEO AGUA MINERAL S/GAS BT 600 ML',       1,  2.80),
-(968063,   'SAN MATEO AGUA MINERAL S/GAS BT 2.5 L',        1,  5.00),
-(20077910, 'SAN MATEO AGUA MINERAL C/GAS 1.5 LT',          1,  3.90),
-(945088,   'SAN LUIS AGUA S/GAS BD 7 L',                   1,  7.90),
-(20376680, 'SAN LUIS AGUA C/GAS MANZANA BT 625 ML',        1,  2.20),
-(20376687, 'SAN LUIS AGUA C/GAS MARACUYA BT 625ML',        1,  2.20),
-(20463252, 'SCALA AGUA SIN GAS BT 625 ML',                 1,  1.80),
-(20402221, 'SAN CARLOS AGUA S/GAS BT 500 ML',              1,  1.50),
-(20505658, 'SAN LUIS AGUA SAB C/GAS MANZ BT 1.5 LT',       1,  4.50),
-(20505086, 'SCALA AGUA CON GAS BT 625 ML',                 1,  2.00),
-(20190928, 'AGUA LOA S/GAS BT 2.5 L',                      1,  4.00),
-(20190927, 'AGUA LOA S/GAS BT 625 ML',                     1,  1.60),
-(20328301, 'LOA AGUA S/GAS BD 7 L',                        1,  7.50),
-(20360737, 'LOA AGUA LIGERA S/GAS BD 20L',                 1, 16.00),
-(20389697, 'LOA AGUA S/GAS BT 1 L',                        1,  2.30),
-(20501943, 'LOA AGUA LIGERA C/GAS BT 625 ML',              1,  2.10),
-(20562160, 'SCALA AGUA CON GAS PIÑA-KION BT 625 ML',       1,  2.20),
-(20562162, 'SCALA AGUA CON GAS MANZANA BT 625 ML',         1,  2.20),
-(20505700, 'SCALA AGUA CON GAS BT 1.5 L',                  1,  4.50);
-
-
---  PRODUCTOS — COMESTIBLES 
-
-
-INSERT INTO productos (codigo_producto, descripcion_producto, id_categoria, precio) VALUES
-(20463476,   'OLIBEL ACEITE DE OLIVA EXTRA V BT 200ML',          2, 14.90),
-(20463500,   'OLIBEL ACEITE DE OLIVA PURO BT 200ML',             2, 12.50),
-(20463508,   'OLIBEL ACEITE DE AJONJOLI BT 100ML',               2,  8.90),
-(20463513,   'OLIBEL ACEITE DE OLIVA EXTRA V BT 100ML',          2,  9.90),
-(107285,     'SOYA ACEITE SOY REFINADA BT900ML',                  2,  7.20),
-(20422060,   'SIGLO DE ORO ACEITE VEGETAL BT 900ML',             2,  6.80),
-(20326400,   'BELL''S SELECCIÓN ACEITE GIRASOL BT 900ML',        2,  9.50),
-(20423811,   'SIGLO DE ORO ACEITE VEGETAL BT 3LT',               2, 21.00),
-(20281564,   'PRIMOR ACEITE VEGETAL PREMIUM BT 900ML',           2, 10.50),
-(20503697,   'DELIOLIO ACEITE OLIVA EXT VIRG BT200ML',           2, 16.90),
-(20319065,   'SOMOS DEL NORTE ARROZ INTEGRAL 650GR',             2,  3.90),
-(20319070,   'SOMOS DEL NORTE ARROZ SUPERIOR 650GR',             2,  3.20),
-(20319072,   'SOMOS DEL NORTE ARROZ FAMILIAR BL 650GR',          2,  2.90),
-(20319075,   'SOMOS DEL NORTE ARROZ EXTRA BL 650GR',             2,  3.50),
-(20112789,   'MI ARROZ SUPERIOR KG',                              2,  4.80),
-(20130998,   'PAISANA ARROZ EXTRA BL5KG',                         2, 21.50),
-(20139618,   'FARAON ARROZ EXTRA AÑEJO NARANJA BL750GR',         2,  4.20),
-(20237264,   'ARROZ EXTRA FARAON AZUL BL X5KG',                  2, 22.90),
-(20283876,   'ARROZ EXTRA FARAON AZUL BL750G',                   2,  4.50),
-(20319064,   'SOMOS DEL NORTE ARROZ SUPERIOR BL 4KG',            2, 18.50),
-(20319074,   'SOMOS DEL NORTE ARROZ EXTRA BL 4KG',               2, 19.90),
-(20139617,   'FARAON ARROZ EXTRA AÑEJO NARANJA BL5KG',           2, 23.50),
-(433778,     'COSTEÑO ARROZ EXTRA GRANEADITO BL750GR',            2,  4.30),
-(20319069,   'SOMOS DEL NORTE ARROZ FAMILIAR BL 4KG',            2, 16.90),
-(20565627,   'SOMOS DEL NORTE ARROZ SUPERIOR BL2KG',             2,  9.50),
-(20319066,   'EL GRANELITO AZUCAR BLANCA BL 1.3KG',              2,  5.20),
-(20319068,   'EL GRANELITO AZUCAR RUBIA BL 1.3KG',               2,  5.00),
-(20319063,   'EL GRANELITO AZUCAR BLANCA 650G',                  2,  2.80),
-(20319071,   'EL GRANELITO AZUCAR RUBIA 650G',                   2,  2.60),
-(20393772,   'ENDULZANTE VALIDA POTE 60G',                        2,  3.20),
-(20184796,   'CARTAVIO AZUCAR RUBIA BL X 1KG',                   2,  4.10),
-(20184801,   'CARTAVIO AZUCAR RUBIA BL X 5 KG',                  2, 19.50),
-(20211720,   'SAN JACINTO AZUCAR RUBIA SC25KG',                  2, 75.00),
-(20319067,   'EL GRANELITO AZUCAR RUBIA BL 4KG',                 2, 15.90),
-(20235918,   'SAN JACINTO AZUCAR RUBIA KG',                      2,  4.00),
-(20569635,   'EL GRANELITO AZUCAR BLANCA BL2KG',                 2,  8.50),
-(20475651,   'ONZA STEVIA POTE 60GR',                            2,  6.90),
-(813,        'KNORR PURE DE PAPA SB 125GR',                      2,  2.90),
-(20179149,   'AJINOMEN SOPA INST GALLINA VA 50G',                2,  1.20),
-(20354532,   'AJINOMEN SOPA INST GALLINA PICANT BL 80G',         2,  1.80),
-(20354535,   'AJINOMEN SOPA INST POLLO BL 80G',                  2,  1.80),
-(20354533,   'AJINOMEN SOPA INST GALLINA BL 80G',                2,  1.80),
-(20257926,   'VALIDA PURÉ DE PAPA UN 125GR',                     2,  2.20),
-(20325989,   'VALIDA SOPA INSTANTÁNEA POLLO PIC SB 75G',         2,  1.30),
-(20325991,   'VALIDA SOPA INSTANTÁNEA POLLO SB 75GR',            2,  1.30),
-(20325990,   'VALIDA SOPA INSTANTÁNEA CARNE SB 75GR',            2,  1.30),
-(20425499,   'VALIDA SOPA INSTANTANEA GALLINA SB 75GR',          2,  1.30),
-(20469169,   'ECCO DOYPACK 170G',                                2,  4.50),
-(20100882,   'SOL DEL CUSCO TABLETA CLAV/CAN BL 90G',            2,  3.20),
-(20564774,   'BOM DÍA TABLETA TAZA 80 GR',                       2,  2.80),
-(20569421,   'AVENLY AVENA TRADICIONAL BL 100 GR',               2,  1.50),
-(20282817,   'CEREALES GO BOLITAS DE CHOCOLATE BL 120G',         2,  3.90),
-(20282819,   'CEREALES GO ZUCATRIGO BL 120GR',                   2,  3.90),
-(20282818,   'CEREALES GO MACATRIGO BL 120GR',                   2,  3.90),
-(20289813,   'CEREALES GO BOLITAS DE COLORES BL120GR',           2,  3.90),
-(20289814,   'CEREALES GO MACARITOS BL 120GR',                   2,  3.90),
-(20358164,   'CEREALES GO HOJUELAS CHOCOLATE BL 120G',           2,  3.90),
-(20210204,   'COSTA CEREAL BAR CHIPS CJ8UN',                     2,  8.50),
-(20281305,   'MILO FORTIFICANTE GRANULADO DP 350GR',             2, 15.90),
-(20426128,   'KELLOGGS CORN FLAKES CEREAL CJ 410GR',             2, 14.50),
-(20088045,   'KIRMA CAFÉ INSTANTÁNEO LT 190GR',                  2, 24.90),
-(20214622,   'COSTA CEREAL BAR CHOCO CJ12',                      2, 15.00),
-(20257852,   'QUAKER AVENA TRADICIONAL BL 100G',                 2,  1.20),
-(20366101,   'ALTOMAYO GOURMET CAFÉ INST TR 10X15GR',            2, 13.50),
-(20410477,   'ALTOMAYO GOURMET CAFÉ INST DP 45GR',               2,  7.90),
-(468,        'CAFETAL SELECTO CAFÉ TOST MOLIDO BL 200G',         2, 11.90),
-(20109363,   'NESTLÉ CHOCAPIC CEREAL BL 90GR',                   2,  4.90),
-(20237536,   'MILO FORTIFICANTE GRANULADO DP 90GR',              2,  5.90),
-(20281303,   'NESQUIK FORTIFICANTE CHOCOLATE DP 190GR',          2,  8.90),
-(20353739,   'KIRMA CAFÉ INSTANTÁNEO SB 15GR',                   2,  2.80),
-(20353740,   'ECCO BEBIDA INSTANTÁNEA CEBADA SB 12GR',           2,  0.80),
-(20353741,   'NESCAFÉ TRADICIÓN CAFÉ INST DP 50GR',              2, 13.90),
-(20392950,   'NESCAFÉ TRADICIÓN CAFÉ INST SB 7GR',               2,  2.00),
-(20058032,   'ÁNGEL COPIX CEREAL BL 380GR',                      2,  9.90),
-(1107335002, 'GRANO DE ORO AVENA QUINUA BL 370GR',               2,  5.50),
-(20355241,   'CHOCOBOLL POWER BOLSA 200 gr',                     2,  6.90),
-(20391004,   'GRANADINO CAFÉ INSTANTANEO POLV FR 50GR',          2,  6.50),
-(20391003,   'GRANADINO CAFÉ INSTANTANEO POLV DP 100GR',         2, 12.90),
-(20392928,   'PROXI+ CREMA DE CACAO PO 350 GR',                  2,  8.90),
-(20392925,   'PROXI+ CREMA DE AVELLANAS PO 350 GR',              2,  9.90),
-(20358163,   'CEREALES GO ARITOS DE COLORES BL 20G',             2,  1.20),
-(20325555,   'ÁNGEL CHOCK CEREAL BL 130GR',                      2,  4.50),
-(20329006,   'ÁNGEL ZUCK CEREAL BL 130GR',                       2,  4.50),
-(20331109,   'WINTER''S COCOA PURA DP 150G',                     2,  9.90),
-(20424812,   'WINTER''S COCOA PURA BL 40G',                      2,  3.50),
-(20568442,   'HUERTO MÁGICO SIROPE MAPLE 290 ML',                2, 12.90),
-(20210203,   'COSTA CEREAL BAR GOLDEN CJ8UN',                    2,  8.50),
-(20105166,   'GOLDEN FOODS HOJUELAS DE MAIZ BL 200GR',           2,  3.90),
-(20105208,   'GOLDEN FOODS HOJUELAS AZUCARADAS BL 200G',         2,  3.90),
-(20182460,   'MARISCAL CAFE TOSTADO MOLIDO BL 125GR',            2,  7.90),
-(20209672,   'GRANO DE ORO AVENA BL 10KG',                       2, 35.00),
-(20314522,   'QHURA TE PURO CJ 20 UND',                          2,  4.50),
-(20314523,   'QHURA TE CANELA CLAVO CJ 20 UND',                  2,  4.50),
-(20314526,   'QHURA HIERBA LUISA CJ 20 UND',                     2,  4.50),
-(20314525,   'QHURA ANIS CJ 20 UND',                             2,  4.50),
-(20314524,   'QHURA MANZANILLA CJ 20 UND',                       2,  4.50),
-(20326373,   'CUSSI FRUIT MERMELADA FRESA PT 350GR',             2,  7.90),
-(20326501,   'CUSSI FRUIT MERMELADA FRESA FR 1KG',               2, 18.90),
-(20251263,   'QUAKER AVENA TRADICIONAL BL 900G',                 2,  9.90),
-(20253680,   'ECCO BEBIDA INSTANTÁNEA CEBADA LT 170GR',          2,  8.50),
-(20281907,   'PRONALCE DEL SUR AVENA EN HOJUELA 250G',           2,  2.90),
-(20321740,   'COSEC IMPER CEREA AVENA VAINILLA 250GR',           2,  4.50),
-(20321738,   'COSEC IMPER CEREA GRAN FRUTO ROJO 200GR',          2,  4.50),
-(20321739,   'COSEC IMPER CEREA SABOR SURTIDO 138G x6U',         2,  3.90),
-(5414,       'GRANO DE ORO AVENA GRANEL 1KG',                    2,  4.00),
-(20358165,   'CEREALES GO HOJUELAS CHOCOLATE BL 20G',            2,  1.20),
-(20468551,   'VITARRICO BITES FRUTOS SECOS 130G',                2,  9.90),
-(20366099,   'ALTOMAYO GOURMET CAFÉ INST SB 15GR',               2,  2.50),
-(20501193,   'PROXI+ SIROPE SABOR A MAPLE UN 290 ML',            2,  9.90),
-(20565470,   'NESCAFE KIRMA LT 180G',                            2, 22.90),
-(20029733,   'ÁNGEL COPIX CEREAL BL 120GR',                      2,  3.90),
-(20565854,   'BARANSU TE CANELA CLAVO OLOR CJ 20UND',            2,  4.90),
-(1058690003, 'ÁNGEL FRUIT CEREAL BL 420GR',                      2, 10.90),
-(58686,      'ÁNGEL FLAKES CEREAL BL 500GR',                     2, 11.90),
-(20565850,   'BARANSÚ MANZANILLA CJ X20 UND',                    2,  4.90),
-(20565851,   'BARANSÚ ANIS CJ 20 UND',                           2,  4.90),
-(20565852,   'BARANSU HIERBA LUISA CJ X20UND',                   2,  4.90),
-(20566762,   'BOM DÍA COCOA PURA BL 40G',                        2,  3.50),
-(20566761,   'BOM DÍA COCOA PURA DP 150G',                       2,  8.90),
-(20570277,   'COSTA CEREALBAR GOLDEN CEREAL CJ6UN',              2,  6.50),
-(20570279,   'COSTA CEREALBAR CHOCOCERAL CJ6UN',                 2,  6.50),
-(20570278,   'COSTA CEREALBAR CHIPS CJ6UN',                      2,  6.50),
-(20281302,   'MILO FORTIFICANTE GRANULADO DP 190GR',             2, 10.90),
-(20210202,   'COSTA CEREAL BAR CHOCO CJ8UN',                     2,  8.50),
-(20567349,   'HUERTO MÁGICO MIEL DE ABEJA 175 GR PET',           2, 12.90),
-(20431182,   'ALCA FOODS HOJUELAS CON AZUCAR BL 200GR',          2,  4.50),
-(20431188,   'ALCA FOODS HOJUELAS SIN AZUCAR BL 200GR',          2,  4.90),
-(20456269,   'ALCA FOODS ANILLOS SAB FRUTAS BL 200GR',           2,  4.50),
-(20431183,   'ALCA FOODS HOJUELAS CHOCO BL 200GR',               2,  4.50),
-(20506834,   'NESCAFE TRADICION DP ZIPPER 45G',                  2, 12.90),
-(20468552,   'VITARRICO BARRA CEREAL YOGURT 5 X 135G',           2, 12.90),
-(20567236,   'ECCO CEBADA INSTANTANEA SACHET 10GR',              2,  0.60),
-(20568345,   'SANTA ISABEL CABANOSSI 2UN X 40GR',                2,  5.90),
-(20569367,   'SANTA ISABEL SALCHICHA VIENESA PQ 230G',           2,  7.90),
-(20569366,   'SANTA ISABEL SALCHICHA CON POLL PQ 160GR',         2,  6.50),
-(20289431,   'NAPOLITANA SALCHICHA CON POLLO 920G',              2, 22.90),
-(20391175,   'DELYS SALCHICHA CON POLLO PQ 160G',                2,  5.90),
-(20391180,   'DELYS SALCHICHA VIENESA PQ 230G',                  2,  7.50),
-(20402717,   'DELYS CABANOSSI 2UN X 40G',                        2,  5.50),
-(20354904,   'S. SUIZA HOT DOG AHUMADO PQ 200G',                 2,  8.90),
-(20568542,   'TALLARIN BANCHETTO BL 500g',                       2,  3.90),
-(20568540,   'SPAGUETTI BANCHETTO BL 500g',                      2,  3.90),
-(20092917,   'MOLITALIA FID. P.ENSALDA TORNILLO BL250G',         2,  2.50),
-(20570131,   'BANCHETTO TORNILLO 250G',                          2,  2.20),
-(20570130,   'BANCHETTO CODO 250G',                              2,  2.20),
-(20570129,   'BANCHETTO CANUTO 250G',                            2,  2.20),
-(20212488,   'TALLARIN GRAN MARIA X500GR',                       2,  4.50),
-(20212497,   'SPAGHETTI GRAN MARIA X500GR',                      2,  4.50),
-(20329427,   'GRAN MARIA TALLARIN BL900GR',                      2,  7.90),
-(20389886,   'MOLITALIA FID. P.ENSALDA TORNILLO BL235G',         2,  2.30),
-(20202145,   'DEL CIELO FIDEOS CODO RAYADO BL 250 GR',           2,  2.10),
-(20202142,   'DEL CIELO FIDEOS CANUTO GRANDE BL 250 GR',         2,  2.10),
-(20329444,   'GRAN MARIA SPAGUETTI BL900GR',                     2,  7.90),
-(20062840,   'ALIANZA FID. CAB.ANGEL AL HVO BL 250GR',           2,  3.50),
-(20202143,   'DEL CIELO FIDEOS TORNILLO BL 250 GR',              2,  2.10),
-(20277769,   'DON VITTORIO FIDEO SPAGHETTI BL 450G',             2,  4.90),
-(20277768,   'DON VITTORIO FIDEO SPAGHETTI BL 950G',             2,  8.90),
-(20281186,   'DON VITTORIO FIDEO LINGUINI BL 450GR',             2,  4.90),
-(20283322,   'DON VITTORIO FIDEO CANUTO RAYADO BL 235G',         2,  2.80),
-(20283329,   'DON VITTORIO FIDEO RIGATONI BL 235G',              2,  2.80),
-(20283881,   'MOLITALIA FIDEO SPAGHETTI BL 450G',                2,  3.90),
-(20561630,   'BANCHETTO SPAGUETTI X 500G',                       2,  3.90),
-(20561633,   'BANCHETTO TALLARÍN X900G',                         2,  6.90),
-(20561632,   'BANCHETTO SPAGUETTI X 900G',                       2,  6.90),
-(20561631,   'BANCHETTO TALLARÍN X 500G',                        2,  3.90),
-(20352674,   'MOLITALIA MACARRON BL235G',                        2,  2.50),
-(20366142,   'LA GRANDIOSA MACARRONES CON QUESO CJ206G',         2,  5.90),
-(20501452,   'DON VITTORIO FID SPAGHETTI BL 500G',               2,  4.90),
-(20501419,   'DON VITTORIO FID RIGATONI BL 250G',                2,  2.80),
-(20501420,   'DON VITTORIO FID CANUTO RAYADO BL 250G',           2,  2.80),
-(20501423,   'DON VITTORIO FID LINGUINI BL 500G',                2,  4.90),
-(20568298,   'BANCHETTO CABELLO DE ANGEL X 250G',                2,  2.50),
-(780698,     'DON VITT FID CAB.ANGEL BL 250 GR',                 2,  2.80),
-(20501422,   'DON VITTORIO FID CODO RAYADO BL 250G',             2,  2.80),
-(20501443,   'DON VITTORIO FID TORNILLO BL 250G',                2,  2.80),
-(20352676,   'MOLITALIA LINGUINE BL450G',                        2,  4.20);
-
-
---  PRODUCTOS — CONFITERÍA 
-
-
-INSERT INTO productos (codigo_producto, descripcion_producto, id_categoria, precio) VALUES
-(20148059,   'FIELD CHOC CUA CUA RELAU 6DP 30 PQ 18 GR',   3, 29.90),
-(20505791,   'COSTA VIZZIO ALMENDRA DP 96G',                3,  6.90),
-(20506185,   'DOLCE NOTTE LINGOTE BL 25G',                  3,  1.50),
-(20564845,   'NESTLE SUBLIME SONRISA DS 20X37G',            3, 26.90),
-(20281324,   'NESTLE SUBLIME SONRISA 38 GR X 20 UN',        3, 27.50),
-(20506186,   'DOLCE NOTTE PIRÁMIDE BL 27G',                 3,  1.50),
-(164566,     'SAN JORGE GALLETA ANIMALITOS UN150G',         3,  3.90),
-(20425845,   'ARCOR MINI SAPITO 110GRX20UND',               3, 22.50),
-(20425846,   'ARCOR LIMON X 175G',                          3,  5.90),
-(20463176,   'MISTER POPS CHUPETE FRESA BL 216G',           3,  6.50),
-(20466548,   'SAN JORGE GAL SALADITAS INTEGRALES 6X46G',    3,  7.90),
-(869522,     'NIK WAFER CHOCOLATE 6X27GR',                  3,  4.50),
-(20067115,   'COSTA BIZCOCHO CHOCOLATE CANCUN PK6UN',       3,  7.90),
-(130745,     'NESTLE BESOS DE MOZA CLASICO CJ 9X24G',       3, 15.90),
-(20424383,   'DONOFRIO DONOWAFER CHOCOLATE BL 100G',        3,  5.90),
-(140235,     'FIELD DOÑA PEPA UN 23G',                      3,  0.90),
-(20289673,   'FIELD DOÑA PEPA CJ 30X23G',                   3, 24.90),
-(1673631002, 'VICTORIA GLACITAS TOFFEE 6X32G',              3,  4.50),
-(1057455002, 'PICARAS CLÁSICAS 6X38G',                      3,  4.90),
-(32738,      'BELL''S GALLETAS SALADITAS UN6UN',            3,  4.20),
-(358248,     'FIELD GALLETA CHOKOSODA PQ 6X36G',            3,  5.50),
-(198967,     'MOROCHAS GALLETAS CLASICAS 6X30G',            3,  4.90),
-(20353011,   'NABISCO GALLETAS CHIPS AHOY 6X37G',           3,  7.90),
-(20355481,   'RITZ PLAIN 6 X 20 G',                         3,  5.90),
-(20358195,   'SAYON GALLETA MARGARITA 6X43G',               3,  4.90),
-(20388814,   'TRULULU GOMITA OSO ORO BL 150GR',             3,  4.90),
-(20390131,   'VICTORIA TENTACION GALL CHOCOLATE 6X43G',     3,  6.50),
-(20390134,   'VICTORIA TENTACION GALL NARANJA 6X43G',       3,  6.50),
-(20393833,   'PROXI+ MARSHMALLOW DE COLOR BL100G',          3,  3.50),
-(20425498,   'COSTA BIZCOCHO CHOCMAN PQ 6X33.5G',           3,  7.90),
-(20466772,   'NABISCO RITZ GALLETA TACO UN 70G',            3,  3.90),
-(20108257,   'BELL''S SALADITAS INTEGRALES UN6UN',          3,  4.90),
-(20119755,   'SAN JORGE GALLETA FRUTA MIXTA BL 55 GR',      3,  1.90),
-(20125697,   'SAN JORGE GALL SODA GOURMET BL 250 GR',       3,  6.90),
-(20146979,   'GALLETA SJ ANIMALITOS 60GR',                  3,  1.80),
-(20253223,   'FIELD VAINILLA FAMILIAR UN 148G',             3,  4.90),
-(20355475,   'RITZ QUESO 6 X 30 G',                         3,  6.90),
-(20568558,   'HALLS MENTOL CEREZA&EUCALIPTO UN 25.2G',      3,  1.50),
-(243940,     'FIELD GALLETA VAINILLA 6X37G',                3,  5.50),
-(502139,     'SAN JORGE GALLETA SODA PQTE 7 UN',            3,  6.90),
-(20000442,   'VICTORIA CASINO MENTA LOVER 6X43G',           3,  6.50),
-(20000443,   'FIELD DOÑA PEPA BL 6X23G',                    3,  4.90),
-(20005232,   'GN RELLENITAS CHOCO VAINILLA 8X36G',          3,  7.90),
-(20005234,   'GN GALL RELL. COCO PK 8UN',                   3,  7.90),
-(20020065,   'NABISCO OREO ORIGINAL 6X36G',                 3,  7.90),
-(20119756,   'SAN JORGE GALLETA COCONUT BL 55 GR',          3,  1.90),
-(20281690,   'OREO VAINILLA TACO X108GR',                   3,  5.90),
-(20282832,   'FIELD GALLETA SODA 6X32G',                    3,  5.50),
-(20214797,   'SPARKIES CARAMELOS DS 20X25G',                3, 16.90),
-(20220067,   'MOGUL GOMITAS SABORES FRUTALES 12X35 G',      3, 13.50),
-(20236543,   'TRIDENT 5S MENTA X 18 UN',                    3, 13.90),
-(20236545,   'TRIDENT EVUP MENTA X 12 UN',                  3,  9.90),
-(20236553,   'TRIDENT 5S MORA X 18 UN',                     3, 13.90),
-(20358000,   'SNICKERS CHOCOLATE CJ 24 X 21.5 G',           3, 32.90),
-(20235768,   'TRIDENT EVUP MENTA 30.6 GR',                  3,  3.90),
-(617635,     'VICTORIA GALLETA INTEGRACKERS MIEL PK9U',     3,  8.90),
-(20283849,   'COSTA VIZZIO CJ 63G',                         3,  5.90),
-(1564,       'FIELD CUA CUA WAFER 18G',                     3,  0.80),
-(396349,     'SPARKIES CARAMELOS UN 25G',                   3,  1.20),
-(20219191,   'TRIDENT 5S MENTA 8.5GR',                      3,  1.20),
-(20219197,   'TRIDENT 5S MORA 8.5GR',                       3,  1.20),
-(20257858,   'CHOCOLATE SNICKERS X 21.5 GR',                3,  2.50),
-(14501,      'MOGUL GOMITAS SABORES FRUTALES 35 G',         3,  1.50),
-(111020,     'NESTLE TRIANGULO CLASICO UN 29G',             3,  2.20),
-(20468443,   'OLE OLE 96GR',                                3,  4.90),
-(20564848,   'NESTLE PRINCESA UN 28G',                      3,  2.00),
-(20425298,   'PROXI+ GALLETAS TIPO MARIA TACO 100G',        3,  3.50),
-(20468162,   'TRIDENT YERBABUENA UN 25.2G',                 3,  1.50),
-(20468165,   'TRIDENT SANDÍA UN 25.2G',                     3,  1.50),
-(20468163,   'TRIDENT MORA AZUL UN 25.2G',                  3,  1.50),
-(20570383,   'GLOBO POP SURTIDO BL 12UN',                   3,  6.90),
-(20564841,   'VICTORIA GLACITAS TOFFEE 6X30G',              3,  4.50),
-(20569239,   'BOCARETTA GALLETAS CROCANTITAS 60 GR',        3,  2.90),
-(20519878,   'COSTA BIZCOCHO CANCÚN 6X33G',                 3,  7.90),
-(20146450,   'ALKA CARAMELO MENTOL EUCALIPTO BL 500G',      3,  8.90),
-(20503398,   'ALKA CARAMELO MENTOL EUCALIPTO VUELTO UN',    3,  1.20),
-(20568561,   'HALLS MENTOL CEREZA&EUCALIPT DS 12X25.2G',    3, 15.90),
-(20569670,   'CRAKEÑAS SODA PK 6UNID',                      3,  5.90),
-(20328420,   'LA GRAN GALLE DE MANTE AMOR CJ200GR',         3,  7.90),
-(20257376,   'FIELD CORONITA 6X36G',                        3,  5.50),
-(20566566,   'NABISCO OREO SABOR LIMON 108G',               3,  5.90),
-(20464059,   'NESTLE TRIANGULO CLASICO DS 20X29G',          3, 24.90),
-(20564844,   'NESTLE PRINCESA CLASICO DS 18X28G',           3, 22.90),
-(165365,     'VICTORIA CHOCOBUM GALLETA 6X33G',             3,  6.50),
-(20391995,   'AMBROSOLI GOMAS AMBROSITO ÁCIDO BL 90 G',     3,  3.90),
-(85830,      'ARCOR HW SANGRIENTOS PINTA MIEDO BL 312G',    3,  7.90),
-(20468164,   'TRIDENT FRUTAS TUTTI FRUTTI UN 25.2G',        3,  1.50),
-(374262,     'SAN JORGE GALL. ANIMALITOS TREN UN500G',      3,  9.90),
-(991464,     'ARCOR CARAMELO DE CHICHA UN360G',             3,  6.90),
-(20566567,   'NABISCO OREO SABOR LIMON 6X36G',              3,  7.90),
-(20425299,   'PROXI+ WAFER BAÑADO CHOCOLATE 6PACK 18G',     3,  4.50),
-(20562355,   'DOLCE NOTTE PIRÁMIDE 27GX20UN',               3, 26.90),
-(20562356,   'DOLCE NOTTE LINGOTE 25GX20UN',                3, 26.90),
-(20564842,   'NESTLE SUBLIME SONRISA UN 37G',               3,  2.20),
-(20568504,   'COLOMBINA GALLETA NAVIDAD 80G',               3,  4.90),
-(20571470,   'FIELD DOÑA PEPA DS 30X22G',                   3, 24.90),
-(20571473,   'FIELD DOÑA PEPA 6X22G',                       3,  4.90),
-(20570316,   'VICTORIA MARGARITA 6X41G',                    3,  5.50);
-
-
---  PRODUCTOS — PIQUEOS 
-
-
-INSERT INTO productos (codigo_producto, descripcion_producto, id_categoria, precio) VALUES
-(20464789, 'FRUTOS & SNACKS MIXTURA SIN SAL BL 80GR',      4,  5.90),
-(20237013, 'KARINTO MANI ENGALL SAL 200G',                  4,  6.90),
-(20283172, 'FRUTOS SNACKS CHIFLES SALADOS BL 125 gr',       4,  4.50),
-(20283174, 'FRUTOS SNACKS MIX HOJUELAS BL 100 gr',          4,  4.50),
-(20283173, 'FRUTOS SNACKS PAPAS AL HILO BL 125GR',          4,  4.50),
-(20352706, 'CHEETOS MEGA QUESO BL 90G',                     4,  5.90),
-(20355473, 'DORITOS QUESO ATREVIDO 190 G',                  4,  7.90),
-(20357047, 'F&S CANCHA CHULPI BL 80 g',                     4,  3.50),
-(20365759, 'CHEESE TRIS BL 120G',                           4,  5.90),
-(20466698, 'CHIZITOS QUESO 150G',                           4,  6.50),
-(20468442, 'LAYS CLASICAS 115 GR',                          4,  6.90),
-(20468444, 'LAYS ONDAS PICANTE 105 GR',                     4,  6.90),
-(20394226, 'PROXI+ POP MANTEQUILLA X BL 40G',               4,  2.50),
-(20394227, 'PROXI+ TOTOPOS PICANTE X BL 90G',               4,  4.50),
-(20394229, 'PROXI+ PAPI CHIPS PICANTE X BL 120G',           4,  5.50),
-(20394228, 'PROXI+ NACHOS TORTIQUESO X BL 90G',             4,  4.50),
-(20394289, 'PROXI+ TOTOPOS CLASICO X BL 90G',               4,  4.50),
-(20111196, 'FRUTOS & SNACKS PASAS MORENAS BL 80GR',         4,  3.90),
-(20111197, 'FRUTOS & SNACKS HABAS SALADAS BL 80GR',         4,  3.50),
-(20111198, 'FRUTOS & SNACKS MANI CON PASAS BL 80GR',        4,  4.50),
-(20111199, 'FRUTOS & SNACKS MANI TOSTADO BL 80GR',          4,  4.00),
-(20179461, 'PIQUEO SNAX ORIGINAL BL 190G',                  4,  7.90),
-(20236181, 'PIQUEO SNAX ORIGINAL BL 55G',                   4,  2.90),
-(20349724, 'GOBITE PAPAS SABOR CHEESE UN 60GR',             4,  2.50),
-(20349726, 'GOBITE PAPAS SABOR ORIGINAL UN 60GR',           4,  2.50),
-(20466552, 'INKA CHIPS PAPAS JALAPEÑO ALT BL 115G',         4,  6.90),
-(5616,     'SF PATE 100G',                                  4,  5.90),
-(20468967, 'PROXI+ PAPI CHIPS CLASICAS 120GR',              4,  5.50),
-(20466553, 'INKA CHIPS PAPAS SAL DE MAR ALT BL 120G',       4,  6.90),
-(20357043, 'F&S COCKTAIL CON NUECES SIN SAL X 80 g',        4,  8.90),
-(20468614, 'PROXI+ PIQUEO MIX 180GR',                       4,  8.90),
-(20349725, 'GOBITE PAPAS SABOR ORIGINAL UN 120GR',          4,  4.50),
-(20393393, 'GRANUTS KRAKS ORIGINAL DP 180 G',               4,  7.90),
-(20349723, 'GOBITE PAPAS SABOR CHEESE UN 120GR',            4,  4.50),
-(20349727, 'GOBITE PAPAS SABOR CEBOLLA UN 120GR',           4,  4.50);
-
-
-INSERT INTO inventario (id_producto, stock)
-SELECT id_producto, 100 FROM productos;
-
-
+('Distribuidora Alicorp', '972401846'), ('Gloria S.A.', '906288892'),
+('Arcor', '999333333'), ('Nestlé Perú', '999444444');
 
 INSERT INTO empleados (dni, nombre, apellido, fecha_nacimiento, cargo) VALUES
-('12345678', 'Luis',   'Gonzales', '1990-05-15', 'Vendedor'),
-('87654321', 'Ana',    'Martinez', '1988-11-22', 'Cajera'),
-('11223344', 'Carlos', 'Ramirez',  '1995-02-10', 'Almacenero');
+('12345678', 'Luis', 'Gonzales', '1990-05-15', 'Vendedor'),
+('87654321', 'Ana', 'Martinez', '1988-11-22', 'Cajera'),
+('11223344', 'Carlos', 'Ramirez', '1995-02-10', 'Almacenero');
 
--- NOTA: En producción reemplaza los valores por hashes bcrypt
 INSERT INTO usuarios (username, password_hash, id_empleado, rol) VALUES
-('admin',   'admin123',  1, 'admin'),
-('luisg',   'luis123',   1, 'empleado'),
-('anam',    'ana123',    2, 'empleado'),
-('carlosr', 'carlos123', 3, 'empleado');
+('admin', 'admin123', 1, 'admin'),
+('Andrey', 'andrey123', 1, 'empleado'),
+('Jheremy', 'jheremy123', 2, 'empleado'),
+('Sebastian', 'sebastian123', 3, 'empleado');
+select*from usuarios;
 
 
 
-INSERT INTO clientes (nombre, apellido, telefono) VALUES
-('Juan',  'Perez', '900111001'),
-('Maria', 'Lopez', '900111002');
+-- INSERCIÓN DE PRODUCTOS REGISTRADOS
+INSERT INTO productos (codigo_producto, descripcion_producto, id_categoria, precio) VALUES
+(20463256, 'SCALA AGUA SIN GAS CJ 20L', 1, 18.50), (20463251, 'SCALA AGUA SIN GAS BD 7L', 1, 8.90),
+(20463254, 'SCALA AGUA SIN GAS BT 1 L', 1, 2.50), (20463255, 'SCALA AGUA SIN GAS BT 2.5 L', 1, 4.20),
+(20119837, 'SAN CARLOS AGUA S/GAS BT 3 L', 1, 5.50), (20173636, 'SAN CARLOS AGUA S/GAS PK 20 BT 500 ML', 1, 23.00),
+(737791, 'SAN MATEO AGUA MINERAL C/GAS BT 600 ML', 1, 2.80), (830010, 'SAN MATEO AGUA MINERAL S/GAS BT 600 ML', 1, 2.80),
+(968063, 'SAN MATEO AGUA MINERAL S/GAS BT 2.5 L', 1, 5.00), (20077910, 'SAN MATEO AGUA MINERAL C/GAS 1.5 LT', 1, 3.90),
+(945088, 'SAN LUIS AGUA S/GAS BD 7 L', 1, 7.90), (20376680, 'SAN LUIS AGUA C/GAS MANZANA BT 625 ML', 1, 2.20),
+(20376687, 'SAN LUIS AGUA C/GAS MARACUYA BT 625ML', 1, 2.20), (20463252, 'SCALA AGUA SIN GAS BT 625 ML', 1, 1.80),
+(20402221, 'SAN CARLOS AGUA S/GAS BT 500 ML', 1, 1.50), (20505658, 'SAN LUIS AGUA SAB C/GAS MANZ BT 1.5 LT', 1, 4.50),
+(20505086, 'SCALA AGUA CON GAS BT 625 ML', 1, 2.00), (20190928, 'AGUA LOA S/GAS BT 2.5 L', 1, 4.00),
+(20190927, 'AGUA LOA S/GAS BT 625 ML', 1, 1.60), (20328301, 'LOA AGUA S/GAS BD 7 L', 1, 7.50),
+(20360737, 'LOA AGUA LIGERA S/GAS BD 20L', 1, 16.00), (20389697, 'LOA AGUA S/GAS BT 1 L', 1, 2.30),
+(20501943, 'LOA AGUA LIGERA C/GAS BT 625 ML', 1, 2.10), (20562160, 'SCALA AGUA CON GAS PIÑA-KION BT 625 ML', 1, 2.20),
+(20562162, 'SCALA AGUA CON GAS MANZANA BT 625 ML', 1, 2.20), (20505700, 'SCALA AGUA CON GAS BT 1.5 L', 1, 4.50),
+(20463476, 'OLIBEL ACEITE DE OLIVA EXTRA V BT 200ML', 2, 14.90), (20463500, 'OLIBEL ACEITE DE OLIVA PURO BT 200ML', 2, 12.50),
+(20463508, 'OLIBEL ACEITE DE AJONJOLI BT 100ML', 2, 8.90), (20463513, 'OLIBEL ACEITE DE OLIVA EXTRA V BT 100ML', 2, 9.90),
+(107285, 'SOYA ACEITE SOY REFINADA BT900ML', 2, 7.20), (20422060, 'SIGLO DE ORO ACEITE VEGETAL BT 900ML', 2, 6.80),
+(20326400, 'BELL''S SELECCIÓN ACEITE GIRASOL BT 900ML', 2, 9.50), (20423811, 'SIGLO DE ORO ACEITE VEGETAL BT 3LT', 2, 21.00),
+(20281564, 'PRIMOR ACEITE VEGETAL PREMIUM BT 900ML', 2, 10.50), (20503697, 'DELIOLIO ACEITE OLIVA EXT VIRG BT200ML', 2, 16.90),
+(20319065, 'SOMOS DEL NORTE ARROZ INTEGRAL 650GR', 2, 3.90), (20319070, 'SOMOS DEL NORTE ARROZ SUPERIOR 650GR', 2, 3.20),
+(20319072, 'SOMOS DEL NORTE ARROZ FAMILIAR BL 650GR', 2, 2.90), (20319075, 'SOMOS DEL NORTE ARROZ EXTRA BL 650GR', 2, 3.50),
+(20112789, 'MI ARROZ SUPERIOR KG', 2, 4.80), (20130998, 'PAISANA ARROZ EXTRA BL5KG', 2, 21.50),
+(20139618, 'FARAON ARROZ EXTRA AÑEJO NARANJA BL750GR', 2, 4.20), (20237264, 'ARROZ EXTRA FARAON AZUL BL X5KG', 2, 22.90),
+(20283876, 'ARROZ EXTRA FARAON AZUL BL750G', 2, 4.50), (20319064, 'SOMOS DEL NORTE ARROZ SUPERIOR BL 4KG', 2, 18.50),
+(20319074, 'SOMOS DEL NORTE ARROZ EXTRA BL 4KG', 2, 19.90), (20139617, 'FARAON ARROZ EXTRA AÑEJO NARANJA BL5KG', 2, 23.50),
+(433778, 'COSTEÑO ARROZ EXTRA GRANEADITO BL750GR', 2, 4.30), (20319069, 'SOMOS DEL NORTE ARROZ FAMILIAR BL 4KG', 2, 16.90),
+(20565627, 'SOMOS DEL NORTE ARROZ SUPERIOR BL2KG', 2, 9.50), (20319066, 'EL GRANELITO AZUCAR BLANCA BL 1.3KG', 2, 5.20),
+(20319068, 'EL GRANELITO AZUCAR RUBIA BL 1.3KG', 2, 5.00), (20319063, 'EL GRANELITO AZUCAR BLANCA 650G', 2, 2.80),
+(20319071, 'EL GRANELITO AZUCAR RUBIA 650G', 2, 2.60), (20393772, 'ENDULZANTE VALIDA POTE 60G', 2, 3.20),
+(20184796, 'CARTAVIO AZUCAR RUBIA BL X 1KG', 2, 4.10), (20184801, 'CARTAVIO AZUCAR RUBIA BL X 5 KG', 2, 19.50),
+(20211720, 'SAN JACINTO AZUCAR RUBIA SC25KG', 2, 75.00), (20319067, 'EL GRANELITO AZUCAR RUBIA BL 4KG', 2, 15.90),
+(20235918, 'SAN JACINTO AZUCAR RUBIA KG', 2, 4.00), (20569635, 'EL GRANELITO AZUCAR BLANCA BL2KG', 2, 8.50),
+(20475651, 'ONZA STEVIA POTE 60GR', 2, 6.90), (813, 'KNORR PURE DE PAPA SB 125GR', 2, 2.90),
+(20148059, 'FIELD CHOC CUA CUA RELAU 6DP 30 PQ 18 GR', 3, 29.90), (20505791, 'COSTA VIZZIO ALMENDRA DP 96G', 3, 6.90),
+(20506185, 'DOLCE NOTTE LINGOTE BL 25G', 3, 1.50), (20564845, 'NESTLE SUBLIME SONRISA DS 20X37G', 3, 26.90),
+(20281324, 'NESTLE SUBLIME SONRISA 38 GR X 20 UN', 3, 27.50), (20506186, 'DOLCE NOTTE PIRÁMIDE BL 27G', 3, 1.50),
+(164566, 'SAN JORGE GALLETA ANIMALITOS UN150G', 3, 3.90), (20425845, 'ARCOR MINI SAPITO 110GRX20UND', 3, 22.50),
+(20464789, 'FRUTOS & SNACKS MIXTURA SIN SAL BL 80GR', 4, 5.90), (20237013, 'KARINTO MANI ENGALL SAL 200G', 4, 6.90),
+(20283172, 'FRUTOS SNACKS CHIFLES SALADOS BL 125 gr', 4, 4.50), (20283174, 'FRUTOS SNACKS MIX HOJUELAS BL 100 gr', 4, 4.50),
+(20283173, 'FRUTOS SNACKS PAPAS AL HILO BL 125GR', 4, 4.50), (20352706, 'CHEETOS MEGA QUESO BL 90G', 4, 5.90),
+(20355473, 'DORITOS QUESO ATREVIDO 190 G', 4, 7.90), (20357047, 'F&S CANCHA CHULPI BL 80 g', 4, 3.50);
+--Agregando mas productos--
+INSERT INTO productos (codigo_producto, descripcion_producto, precio, id_categoria) VALUES
+-- BEBIDAS (categoria 1)
+(20601001, 'COCA COLA CLASICA BT 500ML',           3.50, 1),
+(20601002, 'COCA COLA CLASICA BT 1.5L',            6.50, 1),
+(20601003, 'INCA KOLA BT 500ML',                   3.50, 1),
+(20601004, 'INCA KOLA BT 1.5L',                    6.50, 1),
+(20601005, 'SPRITE BT 500ML',                      3.20, 1),
+(20601006, 'FANTA NARANJA BT 500ML',               3.20, 1),
+ 
+-- COMESTIBLES (categoria 2)
+(20601007, 'FIDEOS MOLITALIA TALLARIN 500G',        3.80, 2),
+(20601008, 'FIDEOS MOLITALIA ESPAGUETI 500G',       3.80, 2),
+(20601009, 'SAL MARINA EMSAL BL 1KG',              1.90, 2),
+(20601010, 'ATUN FLORIDA AL AGUA LATA 170G',       4.50, 2),
+(20601011, 'ATUN CAMPOMAR AL AGUA LATA 170G',      4.20, 2),
+(20601012, 'LECHE GLORIA ENTERA TARRO 400G',       6.90, 2),
+(20601013, 'LECHE GLORIA EVAPORADA CAJA 946ML',    5.80, 2),
+(20601014, 'AVENA 3 OSITOS BOLSA 500G',            3.50, 2),
+(20601015, 'HARINA BLANCA NIEVE BL 1KG',           3.20, 2),
+(20601016, 'MENESTRAS LENTEJA SELECTA BL 500G',    4.10, 2),
+(20601017, 'MENESTRAS FRIJOL CANARIO BL 500G',     4.30, 2),
+ 
+-- CONFITERÍA (categoria 3)
+(20601018, 'SUBLIME CLASICO 30G',                  1.50, 3),
+(20601019, 'CHOCOTELLA ARCOR BL 200G',             5.90, 3),
+(20601020, 'GALLETA SODA FIELD 6PACK 216G',        4.20, 3),
+(20601021, 'GALLETA OREO CLASICA PQ 119G',         3.90, 3),
+ 
+-- PIQUEOS (categoria 4)
+(20601022, 'LAYS CLASICAS BL 42G',                 2.50, 4),
+(20601023, 'PRINGLES ORIGINAL LATA 124G',          9.90, 4),
+(20601024, 'MANÍ SNACK KARINTO PICANTE 200G',      6.90, 4),
+ 
+-- LIMPIEZA (categoria 5)
+(20601025, 'JABÓN BOLIVAR BARRA 360G',             4.50, 5),
+(20601026, 'DETERGENTE ARIEL BOLSA 500G',          8.90, 5),
+(20601027, 'LEJIA CLOROX REGULAR BT 680ML',        5.50, 5);
 
+-- INSERCIÓN DE INVENTARIO (Niveles de stock variados)
+INSERT INTO inventario (id_producto, stock) VALUES
+(1, 45), (2, 120), (3, 85), (4, 34), (5, 90), (6, 12), (7, 67), (8, 200), (9, 150), (10, 43),
+(11, 22), (12, 14), (13, 89), (14, 55), (15, 30), (16, 75), (17, 105), (18, 21), (19, 39), (20, 66),
+(21, 19), (22, 110), (23, 145), (24, 8), (25, 41), (26, 99), (27, 230), (28, 4), (29, 31), (30, 77),
+(31, 56), (32, 10), (33, 18), (34, 48), (35, 122), (36, 101), (37, 7), (38, 59), (39, 33), (40, 27),
+(41, 15), (42, 134), (43, 62), (44, 40), (45, 94), (46, 160), (47, 82), (48, 111), (49, 38), (50, 71),
+(51, 86), (52, 9), (53, 50), (54, 25), (55, 175), (56, 13), (57, 54), (58, 60), (59, 140), (60, 20),
+(61, 88), (62, 115), (63, 24), (64, 46), (65, 32), (66, 76), (67, 102), (68, 6), (69, 49), (70, 81),
+(71, 95), (72, 3), (73, 118);
+--Mas inventario de productos nuevos--
+INSERT INTO inventario (id_producto, stock) VALUES
+(74,  80),   -- COCA COLA 500ML
+(75,  65),   -- COCA COLA 1.5L
+(76,  90),   -- INCA KOLA 500ML
+(77,  70),   -- INCA KOLA 1.5L
+(78,  55),   -- SPRITE 500ML
+(79,  50),   -- FANTA NARANJA 500ML
+(80, 120),   -- FIDEOS TALLARIN
+(81, 115),   -- FIDEOS ESPAGUETI
+(82, 200),   -- SAL EMSAL
+(83,  88),   -- ATUN FLORIDA
+(84,  92),   -- ATUN CAMPOMAR
+(85,  60),   -- LECHE GLORIA TARRO
+(86,  75),   -- LECHE GLORIA CAJA
+(87, 110),   -- AVENA 3 OSITOS
+(88, 130),   -- HARINA BLANCA NIEVE
+(89,  45),   -- LENTEJA
+(90,  40),   -- FRIJOL CANARIO
+(91, 180),   -- SUBLIME CLASICO
+(92,  35),   -- CHOCOTELLA
+(93,  95),   -- GALLETA SODA FIELD
+(94,  85),   -- GALLETA OREO
+(95, 160),   -- LAYS CLASICAS
+(96,  30),   -- PRINGLES
+(97,  72),   -- MANÍ PICANTE
+(98,  68),   -- JABÓN BOLIVAR
+(99,  50),   -- DETERGENTE ARIEL
+(100, 90);   -- LEJIA CLOROX
 
+-- INSERCIÓN DE 100 CLIENTES
+INSERT INTO clientes (nombre, apellido) VALUES
+('Juan', 'Perez'), ('Maria', 'Lopez'), ('Carlos', 'Gomez'), ('Ana', 'Torres'), ('Luis', 'Fernandez'),
+('Pedro', 'Ruiz'), ('Laura', 'Martinez'), ('Jose', 'Diaz'), ('Carmen', 'Garcia'), ('Jorge', 'Alvarez'),
+('Marta', 'Romero'), ('David', 'Soto'), ('Elena', 'Vazquez'), ('Raul', 'Ramos'), ('Lucia', 'Gil'),
+('Diego', 'Blanco'), ('Paula', 'Molina'), ('Andres', 'Iglesias'), ('Sara', 'Ortiz'), ('Javier', 'Rubio'),
+('Rocio', 'Marin'), ('Manuel', 'Sanz'), ('Alba', 'Nuñez'), ('Pablo', 'Castro'), ('Cristina', 'Navarro'),
+('Alejandro', 'Delgado'), ('Patricia', 'Morales'), ('Ruben', 'Guerrero'), ('Silvia', 'Garrido'), ('Oscar', 'Cabrera'),
+('Beatriz', 'Medina'), ('Alvaro', 'Lozano'), ('Irene', 'Castillo'), ('Ivan', 'Arias'), ('Sonia', 'Rojas'),
+('Adrian', 'Vidal'), ('Natalia', 'Mendez'), ('Victor', 'Pascual'), ('Rosa', 'Herrera'), ('Daniel', 'Peña'),
+('Monica', 'Santana'), ('Marcos', 'Leon'), ('Teresa', 'Flores'), ('Hugo', 'Gallego'), ('Lorena', 'Cortes'),
+('Miguel', 'Herrero'), ('Eva', 'Cruz'), ('Antonio', 'Prieto'), ('Belen', 'Cano'), ('Jesus', 'Gimenez'),
+('Nuria', 'Dominguez'), ('Francisco', 'Velasco'), ('Alicia', 'Rey'), ('Fernando', 'Blazquez'), ('Celia', 'Marquez'),
+('Roberto', 'Campos'), ('Clara', 'Vega'), ('Eduardo', 'Aguilar'), ('Ines', 'Ferrer'), ('Enrique', 'Pinto'),
+('Marina', 'Serrano'), ('Albert', 'Esteban'), ('Diana', 'Galan'), ('Joaquin', 'Rios'), ('Gloria', 'Bravo'),
+('Gonzalo', 'Gomez'), ('Pilar', 'Cruz'), ('Julio', 'Perez'), ('Lidia', 'Silva'), ('Tomas', 'Muñoz'),
+('Miriam', 'Ortega'), ('Ramon', 'Vicente'), ('Angela', 'Vera'), ('Felix', 'Calvo'), ('Aurora', 'Luna'),
+('Ignacio', 'Lara'), ('Esther', 'Rey'), ('Arturo', 'Paz'), ('Berta', 'Cobo'), ('Guillermo', 'Moya'),
+('Victoria', 'Sola'), ('Ricardo', 'Parra'), ('Emma', 'Gallo'), ('Mariano', 'Saez'), ('Rosario', 'Mora'),
+('Emilio', 'Vila'), ('Susana', 'Roca'), ('Rodrigo', 'Pino'), ('Veronica', 'Soto'), ('Julian', 'Mesa'),
+('Amparo', 'Muro'), ('Marcos', 'Polo'), ('Noelia', 'Lago'), ('Esteban', 'Pons'), ('Aitana', 'Baeza'),
+('Salvador', 'Valls'), ('Macarena', 'Font'), ('Juan', 'Mas'), ('Ariadna', 'Roig'), ('Samuel', 'Vila');
+
+-- INSERCIÓN DE TELÉFONOS EN TABLA NORMALIZADA (1FN)
+INSERT INTO cliente_telefonos (id_cliente, telefono) VALUES
+(1, '900111001'), (1, '988222333'), (2, '900111002'), (2, '977444555'),
+(3, '900111003'), (4, '900111004'), (4, '966777888'), (4, '955666777');
+
+-- INSERCIÓN DE 100 VENTAS (Distribuidas entre empleados y fechas)
 INSERT INTO ventas (id_cliente, id_empleado, fecha) VALUES
-(1, 1, '2026-01-01');
+(1, 1, '2026-01-01'), (2, 2, '2026-01-02'), (3, 3, '2026-01-03'), (4, 1, '2026-01-04'), (5, 2, '2026-01-05'),
+(6, 3, '2026-01-06'), (7, 1, '2026-01-07'), (8, 2, '2026-01-08'), (9, 3, '2026-01-09'), (10, 1, '2026-01-10'),
+(11, 2, '2026-01-11'), (12, 3, '2026-01-12'), (13, 1, '2026-01-13'), (14, 2, '2026-01-14'), (15, 3, '2026-01-15'),
+(16, 1, '2026-01-16'), (17, 2, '2026-01-17'), (18, 3, '2026-01-18'), (19, 1, '2026-01-19'), (20, 2, '2026-01-20'),
+(21, 3, '2026-01-21'), (22, 1, '2026-01-22'), (23, 2, '2026-01-23'), (24, 3, '2026-01-24'), (25, 1, '2026-01-25'),
+(26, 2, '2026-01-26'), (27, 3, '2026-01-27'), (28, 1, '2026-01-28'), (29, 2, '2026-01-29'), (30, 3, '2026-01-30'),
+(31, 1, '2026-02-01'), (32, 2, '2026-02-02'), (33, 3, '2026-02-03'), (34, 1, '2026-02-04'), (35, 2, '2026-02-05'),
+(36, 3, '2026-02-06'), (37, 1, '2026-02-07'), (38, 2, '2026-02-08'), (39, 3, '2026-02-09'), (40, 1, '2026-02-10'),
+(41, 2, '2026-02-11'), (42, 3, '2026-02-12'), (43, 1, '2026-02-13'), (44, 2, '2026-02-14'), (45, 3, '2026-02-15'),
+(46, 1, '2026-02-16'), (47, 2, '2026-02-17'), (48, 3, '2026-02-18'), (49, 1, '2026-02-19'), (50, 2, '2026-02-20'),
+(51, 3, '2026-02-21'), (52, 1, '2026-02-22'), (53, 2, '2026-02-23'), (54, 3, '2026-02-24'), (55, 1, '2026-02-25'),
+(56, 2, '2026-02-26'), (57, 3, '2026-02-27'), (58, 1, '2026-02-28'), (59, 2, '2026-03-01'), (60, 3, '2026-03-02'),
+(61, 1, '2026-03-03'), (62, 2, '2026-03-04'), (63, 3, '2026-03-05'), (64, 1, '2026-03-06'), (65, 2, '2026-03-07'),
+(66, 3, '2026-03-08'), (67, 1, '2026-03-09'), (68, 2, '2026-03-10'), (69, 3, '2026-03-11'), (70, 1, '2026-03-12'),
+(71, 2, '2026-03-13'), (72, 3, '2026-03-14'), (73, 1, '2026-03-15'), (74, 2, '2026-03-16'), (75, 3, '2026-03-17'),
+(76, 1, '2026-03-18'), (77, 2, '2026-03-19'), (78, 3, '2026-03-20'), (79, 1, '2026-03-21'), (80, 2, '2026-03-22'),
+(81, 3, '2026-03-23'), (82, 1, '2026-03-24'), (83, 2, '2026-03-25'), (84, 3, '2026-03-26'), (85, 1, '2026-03-27'),
+(86, 2, '2026-03-28'), (87, 3, '2026-03-29'), (88, 1, '2026-03-30'), (89, 2, '2026-03-31'), (90, 3, '2026-04-01'),
+(91, 1, '2026-04-02'), (92, 2, '2026-04-03'), (93, 3, '2026-04-04'), (94, 1, '2026-04-05'), (95, 2, '2026-04-06'),
+(96, 3, '2026-04-07'), (97, 1, '2026-04-08'), (98, 2, '2026-04-09'), (99, 3, '2026-04-10'), (100, 1, '2026-04-11');
 
+-- INSERCIÓN DE DETALLE DE COMPRA Y PRODUCTOS (Ejemplos asignados a las ventas)
 INSERT INTO detalle_venta (id_venta, id_producto, cantidad, precio_unitario) VALUES
-(1, 1, 2, 18.50);
+(1, 1, 2, 18.50), (2, 2, 3, 8.90), (3, 15, 2, 1.50), (4, 26, 1, 4.50), (5, 30, 2, 3.20),
+(6, 50, 1, 4.50), (7, 60, 4, 3.90), (8, 70, 2, 6.90), (9, 10, 1, 3.90), (10, 12, 3, 2.20),
+(11, 20, 1, 7.50), (12, 25, 2, 2.20), (13, 33, 5, 9.50), (14, 40, 1, 3.50), (15, 45, 2, 4.50),
+(16, 55, 3, 3.20), (17, 65, 1, 6.90), (18, 73, 4, 3.50), (19, 5, 2, 5.50), (20, 11, 3, 7.90),
+(21, 22, 1, 2.30), (22, 28, 2, 12.50), (23, 35, 3, 10.50), (24, 42, 1, 21.50), (25, 48, 2, 23.50),
+(26, 52, 1, 5.00), (27, 58, 2, 2.90), (28, 62, 3, 1.50), (29, 68, 1, 5.90), (30, 71, 2, 4.50),
+(31, 2, 2, 8.90), (32, 4, 1, 4.20), (33, 9, 3, 5.00), (34, 14, 2, 1.80), (35, 18, 1, 4.00),
+(36, 21, 2, 16.00), (37, 24, 3, 2.20), (38, 27, 1, 14.90), (39, 31, 2, 7.20), (40, 36, 4, 16.90),
+(41, 41, 1, 4.80), (42, 44, 2, 22.90), (43, 49, 3, 4.30), (44, 51, 1, 9.50), (45, 56, 2, 4.10),
+(46, 59, 1, 8.50), (47, 63, 2, 26.90), (48, 67, 3, 22.50), (49, 69, 1, 6.90), (50, 72, 2, 7.90),
+(51, 1, 2, 18.50), (52, 3, 3, 2.50), (53, 7, 1, 2.80), (54, 13, 2, 2.20), (55, 17, 3, 2.00),
+(56, 23, 1, 2.10), (57, 29, 2, 8.90), (58, 32, 3, 6.80), (59, 37, 1, 3.90), (60, 39, 2, 2.90),
+(61, 43, 3, 4.20), (62, 47, 1, 19.90), (63, 53, 2, 2.80), (64, 57, 3, 19.50), (65, 61, 1, 29.90),
+(66, 64, 2, 27.50), (67, 66, 3, 3.90), (68, 70, 1, 4.50), (69, 73, 2, 3.50), (70, 8, 3, 2.80),
+(71, 16, 1, 4.50), (72, 19, 2, 1.60), (73, 34, 3, 21.00), (74, 38, 1, 3.20), (75, 46, 2, 18.50),
+(76, 50, 3, 16.90), (77, 54, 1, 2.60), (78, 60, 2, 6.90), (79, 15, 3, 1.50), (80, 26, 1, 4.50),
+(81, 30, 2, 3.20), (82, 55, 3, 3.20), (83, 65, 1, 6.90), (84, 10, 2, 3.90), (85, 12, 3, 2.20),
+(86, 20, 1, 7.50), (87, 25, 2, 2.20), (88, 33, 3, 9.50), (89, 40, 1, 3.50), (90, 45, 2, 4.50),
+(91, 52, 3, 5.00), (92, 58, 1, 2.90), (93, 62, 2, 1.50), (94, 68, 3, 5.90), (95, 71, 1, 4.50),
+(96, 2, 2, 8.90), (97, 4, 3, 4.20), (98, 9, 1, 5.00), (99, 14, 2, 1.80), (100, 18, 3, 4.00);
+--Mas detalle de venta--
+INSERT INTO detalle_venta (id_venta, id_producto, cantidad, precio_unitario) VALUES
+(1,  74, 2, 3.50),
+(2,  75, 1, 6.50),
+(3,  76, 3, 3.50),
+(4,  77, 2, 6.50),
+(5,  78, 1, 3.20),
+(6,  79, 4, 3.20),
+(7,  80, 2, 3.80),
+(8,  81, 1, 3.80),
+(9,  82, 5, 1.90),
+(10, 83, 2, 4.50),
+(11, 84, 3, 4.20),
+(12, 85, 1, 6.90),
+(13, 86, 2, 5.80),
+(14, 87, 3, 3.50),
+(15, 88, 2, 3.20),
+(16, 89, 1, 4.10),
+(17, 90, 2, 4.30),
+(18, 91, 6, 1.50),
+(19, 92, 1, 5.90),
+(20, 93, 2, 4.20),
+(21, 94, 3, 3.90),
+(22, 95, 4, 2.50),
+(23, 96, 1, 9.90),
+(24, 97, 2, 6.90),
+(25, 98, 3, 4.50),
+(26, 99, 1, 8.90),
+(27, 100, 2, 5.50);
 
+ 
+-- PAGOS SIMULADOS
 INSERT INTO pagos (id_venta, id_metodo, monto) VALUES
-(1, 1, 37.00);
+(1, 1, 37.00), (2, 2, 26.70), (3, 3, 3.00), (4, 4, 4.50), (5, 1, 6.40),
+(6, 2, 4.50), (7, 3, 15.60), (8, 4, 13.80), (9, 1, 3.90), (10, 2, 6.60);
 
+-- COMPRAS Y DETALLES DE COMPRA
 INSERT INTO compras (id_proveedor, id_empleado, fecha) VALUES
 (1, 2, '2026-01-02');
 
 INSERT INTO detalle_compra (id_compra, id_producto, cantidad, costo_unitario) VALUES
 (1, 1, 50, 15.00);
 
-
-
 INSERT INTO producto_sucursal (id_producto, id_sucursal, stock)
 SELECT id_producto, 1, 50 FROM productos LIMIT 10;
+SELECT * FROM clientes;
+SELECT * FROM ventas;
+SELECT * FROM productos;
+SELECT * FROM inventario;
+
+-- ==========================================
+-- CONSULTAS
+-- ==========================================
+--Tablas principales con cantidad de datos--
+SELECT 'categorias'     AS tabla, COUNT(*) AS registros FROM categorias
+UNION ALL
+SELECT 'productos',      COUNT(*) FROM productos
+UNION ALL
+SELECT 'inventario',     COUNT(*) FROM inventario
+UNION ALL
+SELECT 'clientes',       COUNT(*) FROM clientes
+UNION ALL
+SELECT 'empleados',      COUNT(*) FROM empleados
+UNION ALL
+SELECT 'usuarios',      COUNT(*) FROM usuarios
+UNION ALL
+SELECT 'ventas',         COUNT(*) FROM ventas
+UNION ALL
+SELECT 'detalle_venta',  COUNT(*) FROM detalle_venta
+UNION ALL
+SELECT 'pagos',          COUNT(*) FROM pagos
+ORDER BY tabla;
+
+-- Ranking de Empleados por Ventas
+SELECT 
+    e.nombre || ' ' || e.apellido AS empleado,
+    SUM(dv.cantidad * dv.precio_unitario) AS total_vendido,
+    RANK() OVER (ORDER BY SUM(dv.cantidad * dv.precio_unitario) DESC) AS ranking
+FROM empleados e
+JOIN ventas v ON e.id_empleado = v.id_empleado
+JOIN detalle_venta dv ON v.id_venta = dv.id_venta
+GROUP BY e.id_empleado, e.nombre, e.apellido;
+-- Crecimiento de Ventas Mes a Mes
+WITH ventas_mensuales AS (
+    SELECT 
+        DATE_TRUNC('month', fecha) AS mes,
+        SUM(dv.cantidad * dv.precio_unitario) AS monto_total
+    FROM ventas v
+    JOIN detalle_venta dv ON v.id_venta = dv.id_venta
+    GROUP BY mes
+)
+SELECT 
+    mes, 
+    monto_total,
+    LAG(monto_total) OVER (ORDER BY mes) AS mes_anterior,
+    (monto_total - LAG(monto_total) OVER (ORDER BY mes)) / LAG(monto_total) OVER (ORDER BY mes) * 100 AS porcentaje_crecimiento
+FROM ventas_mensuales;
+--Análisis de Inventario ABC (Pareto):
+SELECT 
+    p.descripcion_producto,
+    (i.stock * p.precio) AS valor_inventario,
+    CUME_DIST() OVER (ORDER BY (i.stock * p.precio) DESC) AS percentil_valor
+FROM productos p
+JOIN inventario i ON p.id_producto = i.id_producto;
+--Clientes "Dormidos" (Subconsultas):
+SELECT nombre, apellido 
+FROM clientes 
+WHERE id_cliente IN (SELECT id_cliente FROM ventas)
+AND id_cliente NOT IN (
+    SELECT id_cliente FROM ventas WHERE fecha > CURRENT_DATE - INTERVAL '30 days'
+);
+--Productos más vendidos por Categoría
+SELECT categoria, producto, total_unidades
+FROM (
+    SELECT 
+        c.nombre AS categoria,
+        p.descripcion_producto AS producto,
+        SUM(dv.cantidad) AS total_unidades,
+        ROW_NUMBER() OVER (PARTITION BY c.id_categoria ORDER BY SUM(dv.cantidad) DESC) as pos
+    FROM productos p
+    JOIN categorias c ON p.id_categoria = c.id_categoria
+    JOIN detalle_venta dv ON p.id_producto = dv.id_producto
+    GROUP BY c.id_categoria, c.nombre, p.id_producto
+) t
+WHERE pos = 1;
+--Correlación entre Método de Pago y Monto Promedio:
+SELECT 
+    mp.tipo AS metodo,
+    COUNT(v.id_venta) AS total_transacciones,
+    ROUND(AVG(p.monto), 2) AS monto_promedio
+FROM metodo_pago mp
+JOIN pagos p ON mp.id_metodo = p.id_metodo
+JOIN ventas v ON p.id_venta = v.id_venta
+GROUP BY mp.tipo;
+--Detección de Stock Crítico (Basado en ventas)
+SELECT p.descripcion_producto, i.stock, v_prom.promedio_semanal
+FROM productos p
+JOIN inventario i ON p.id_producto = i.id_producto
+JOIN (
+    SELECT id_producto, SUM(cantidad) / 4.0 AS promedio_semanal
+    FROM detalle_venta
+    GROUP BY id_producto
+) v_prom ON p.id_producto = v_prom.id_producto
+WHERE i.stock < v_prom.promedio_semanal;
+--Pares de Productos (Market Basket Analysis):
+SELECT 
+    p1.descripcion_producto AS prod_a, 
+    p2.descripcion_producto AS prod_b, 
+    COUNT(*) AS frecuencia
+FROM detalle_venta dv1
+JOIN detalle_venta dv2 ON dv1.id_venta = dv2.id_venta AND dv1.id_producto < dv2.id_producto
+JOIN productos p1 ON dv1.id_producto = p1.id_producto
+JOIN productos p2 ON dv2.id_producto = p2.id_producto
+GROUP BY prod_a, prod_b
+ORDER BY frecuencia DESC
+LIMIT 10;
+--Recaudación por Hora/Día (Heatmap Data)
+SELECT 
+    EXTRACT(DOW FROM fecha) AS dia_semana, -- 0=Domingo
+    COUNT(*) AS volumen_ventas,
+    SUM(dv.cantidad * dv.precio_unitario) AS recaudacion
+FROM ventas v
+JOIN detalle_venta dv ON v.id_venta = dv.id_venta
+GROUP BY dia_semana
+ORDER BY recaudacion DESC;
+--Tasa de Retención de Clientes
+SELECT 
+    COUNT(CASE WHEN compras_cliente > 1 THEN 1 END) * 100.0 / COUNT(*) AS tasa_retencion_porcentaje
+FROM (
+    SELECT id_cliente, COUNT(*) as compras_cliente
+    FROM ventas
+    GROUP BY id_cliente
+) sub;
+
+-- ==========================================
+-- SECCIÓN DE VISTAS AVANZADAS
+-- ==========================================
+
+-- 1. Vista: Dashboard Financiero Mensual
+-- Consolidado de ingresos, costos y volumen de transacciones por mes.
+CREATE OR REPLACE VIEW vista_resumen_financiero AS
+SELECT 
+    TO_CHAR(v.fecha, 'YYYY-MM') AS periodo,
+    SUM(dv.cantidad * dv.precio_unitario) AS ingresos_totales,
+    COUNT(DISTINCT v.id_venta) AS total_pedidos
+FROM ventas v
+JOIN detalle_venta dv ON v.id_venta = dv.id_venta
+GROUP BY periodo;
+SELECT * FROM vista_resumen_financiero;
+
+-- 2. Vista: Perfil 360 del Cliente
+-- Muestra el historial acumulado, total gastado y frecuencia de cada cliente.
+CREATE OR REPLACE VIEW vista_clientes_vip AS
+SELECT 
+    c.id_cliente,
+    c.nombre || ' ' || c.apellido AS cliente,
+    COUNT(v.id_venta) AS total_compras,
+    SUM(dv.cantidad * dv.precio_unitario) AS total_gastado,
+    MAX(v.fecha) AS ultima_visita
+FROM clientes c
+LEFT JOIN ventas v ON c.id_cliente = v.id_cliente
+LEFT JOIN detalle_venta dv ON v.id_venta = dv.id_venta
+GROUP BY c.id_cliente;
+SELECT * FROM vista_clientes_vip;
+
+-- 3. Vista: Alerta de Reabastecimiento
+-- Identifica automáticamente los productos con stock crítico o agotados.
+CREATE OR REPLACE VIEW vista_alerta_stock AS
+SELECT 
+    p.codigo_producto,
+    p.descripcion_producto,
+    i.stock,
+    CASE 
+        WHEN i.stock = 0 THEN 'AGOTADO'
+        WHEN i.stock < 10 THEN 'CRÍTICO'
+        ELSE 'BAJO'
+    END AS estado
+FROM productos p
+JOIN inventario i ON p.id_producto = i.id_producto
+WHERE i.stock < 20;
+SELECT * FROM vista_alerta_stock;
+
+-- 4. Vista: Auditoría de Usuarios y Empleados
+-- Cruza las cuentas de acceso al sistema con la información del personal físico.
+CREATE OR REPLACE VIEW vista_usuarios_activos AS
+SELECT 
+    u.username,
+    u.rol,
+    e.nombre || ' ' || e.apellido AS empleado_real,
+    e.cargo
+FROM usuarios u
+JOIN empleados e ON u.id_empleado = e.id_empleado;
+SELECT * FROM vista_usuarios_activos;
+
+-- 5. Vista: Valorización de Inventario por Categoría
+-- Calcula el capital total detenido en almacén agrupado por rubro.
+CREATE OR REPLACE VIEW vista_valor_inventario_cat AS
+SELECT 
+    c.nombre AS categoria,
+    SUM(i.stock) AS unidades_totales,
+    SUM(i.stock * p.precio) AS capital_estimado
+FROM productos p
+JOIN categorias c ON p.id_categoria = c.id_categoria
+JOIN inventario i ON p.id_producto = i.id_producto
+GROUP BY c.nombre;
+SELECT * FROM vista_valor_inventario_cat;
+
+-- 6. Vista: Rendimiento de Proveedores
+-- Analiza la inversión total y la cantidad de órdenes realizadas a cada proveedor.
+CREATE OR REPLACE VIEW vista_analisis_proveedores AS
+SELECT 
+    pr.nombre AS proveedor,
+    COUNT(DISTINCT c.id_compra) AS numero_compras,
+    SUM(dc.cantidad * dc.costo_unitario) AS inversion_total
+FROM proveedores pr
+JOIN compras c ON pr.id_proveedor = c.id_proveedor
+JOIN detalle_compra dc ON c.id_compra = dc.id_compra
+GROUP BY pr.nombre;
+SELECT * FROM vista_analisis_proveedores;
+
+-- 7. Vista: Top 10 Productos Rentables
+-- Clasifica los productos según el margen de ganancia (Venta vs Promedio Compra).
+CREATE OR REPLACE VIEW vista_productos_rentables AS
+SELECT 
+    p.descripcion_producto,
+    p.precio AS precio_venta,
+    AVG(dc.costo_unitario) AS costo_promedio,
+    (p.precio - AVG(dc.costo_unitario)) AS margen_unitario
+FROM productos p
+JOIN detalle_compra dc ON p.id_producto = dc.id_producto
+GROUP BY p.id_producto, p.descripcion_producto, p.precio
+ORDER BY margen_unitario DESC
+LIMIT 10;
+SELECT * FROM vista_productos_rentables;
+
+-- 8. Vista: Seguimiento de Pagos
+-- Permite auditar las ventas y verificar el método de pago utilizado.
+CREATE OR REPLACE VIEW vista_conciliacion_pagos AS
+SELECT 
+    v.id_venta,
+    v.fecha,
+    mp.tipo AS metodo,
+    pg.monto AS monto_pagado
+FROM ventas v
+JOIN pagos pg ON v.id_venta = pg.id_venta
+JOIN metodo_pago mp ON pg.id_metodo = mp.id_metodo;
+SELECT * FROM vista_conciliacion_pagos;
+
+-- 9. Vista: Rotación de Productos
+-- Calcula la relación entre las unidades vendidas y el stock remanente.
+CREATE OR REPLACE VIEW vista_rotacion_productos AS
+SELECT 
+    p.descripcion_producto,
+    SUM(dv.cantidad) AS unidades_vendidas,
+    i.stock AS stock_actual,
+    ROUND(SUM(dv.cantidad)::numeric / NULLIF(i.stock, 0), 2) AS indice_rotacion
+FROM productos p
+JOIN inventario i ON p.id_producto = i.id_producto
+LEFT JOIN detalle_venta dv ON p.id_producto = dv.id_producto
+GROUP BY p.id_producto, p.descripcion_producto, i.stock;
+SELECT * FROM vista_rotacion_productos;
+
+-- 10. Vista: Catálogo Digital (Optimizado para Aplicación)
+-- Datos limpios y disponibilidad en tiempo real para visualización externa.
+CREATE OR REPLACE VIEW vista_catalogo_cliente AS
+SELECT 
+    p.codigo_producto,
+    p.descripcion_producto,
+    c.nombre AS categoria,
+    p.precio,
+    CASE WHEN i.stock > 0 THEN 'Disponible' ELSE 'Agotado' END AS disponibilidad
+FROM productos p
+JOIN categorias c ON p.id_categoria = c.id_categoria
+JOIN inventario i ON p.id_producto = i.id_producto;
+SELECT * FROM vista_catalogo_cliente;
+
+-- Productos con su respectivo stock
+CREATE OR REPLACE VIEW vista_stock_detallado AS
+SELECT 
+    p.codigo_producto, 
+    p.descripcion_producto, 
+    c.nombre AS categoria, 
+    i.stock
+FROM productos p
+JOIN categorias c ON p.id_categoria = c.id_categoria
+JOIN inventario i ON p.id_producto = i.id_producto;
+SELECT * FROM vista_stock_detallado ORDER BY stock DESC;
+
+--insertamos 200 clientes mas autimaticos
+INSERT INTO clientes (nombre, apellido)
+SELECT 
+    'Cliente' || gs,
+    'Apellido' || gs
+FROM generate_series(101,300) AS gs;
+
+ -- generamos telefonos automaticos 
+ INSERT INTO cliente_telefonos (id_cliente, telefono)
+SELECT 
+    id_cliente,
+    '9' || LPAD((RANDOM()*99999999)::INT::TEXT,8,'0')
+FROM clientes
+WHERE id_cliente >= 101;
+
+--agrego 300 ventas automaticas
+
+INSERT INTO ventas (id_cliente, id_empleado, fecha)
+SELECT
+    (RANDOM()*299 + 1)::INT,
+    (RANDOM()*2 + 1)::INT,
+    CURRENT_DATE - ((RANDOM()*120)::INT)
+FROM generate_series(1,200);
+
+
+-- genero detalle de ventas automaticas
+INSERT INTO detalle_venta (
+    id_venta,
+    id_producto,
+    cantidad,
+    precio_unitario
+)
+SELECT
+    v.id_venta,
+    (RANDOM()*99 + 1)::INT,
+    (RANDOM()*5 + 1)::INT,
+    ROUND((RANDOM()*20 + 1)::NUMERIC,2)
+FROM ventas v
+WHERE v.id_venta > 100;
+
+--pagos automaticos
+INSERT INTO pagos (id_venta, id_metodo, monto)
+SELECT
+    id_venta,
+    (RANDOM()*3 + 1)::INT,
+    ROUND((RANDOM()*150 + 10)::NUMERIC,2)
+FROM ventas
+WHERE id_venta > 10;
+
+-- =========================================================
+-- =========================================================
+--          MÓDULO 1 : ADMINISTRADOR
+-- =========================================================
+-- =========================================================
+
+-- =========================================
+-- VISTAS ADMINISTRADOR
+-- =========================================
+
+-- Vista 1: Ingresos diarios
+CREATE OR REPLACE VIEW vista_admin_ingresos_diarios AS
+SELECT
+    v.fecha,
+    COUNT(v.id_venta) AS total_ventas,
+    SUM(dv.cantidad * dv.precio_unitario) AS ingresos
+FROM ventas v
+JOIN detalle_venta dv
+ON v.id_venta = dv.id_venta
+GROUP BY v.fecha;
+
+-- Vista 2: Rendimiento de empleados
+CREATE OR REPLACE VIEW vista_admin_rendimiento_empleados AS
+SELECT
+    e.id_empleado,
+    e.nombre || ' ' || e.apellido AS empleado,
+    COUNT(v.id_venta) AS ventas_realizadas,
+    SUM(dv.cantidad * dv.precio_unitario) AS total_generado
+FROM empleados e
+JOIN ventas v
+ON e.id_empleado = v.id_empleado
+JOIN detalle_venta dv
+ON v.id_venta = dv.id_venta
+GROUP BY e.id_empleado;
+
+-- =========================================
+-- 15 CONSULTAS ADMINISTRADOR
+-- =========================================
+
+-- 1. Total de ingresos por mes
+SELECT
+    TO_CHAR(v.fecha,'YYYY-MM') AS mes,
+    SUM(dv.cantidad * dv.precio_unitario) AS ingresos
+FROM ventas v
+JOIN detalle_venta dv
+ON v.id_venta = dv.id_venta
+GROUP BY mes
+ORDER BY mes;
+
+-- 2. Empleado que más vendió
+SELECT
+    e.nombre,
+    e.apellido,
+    SUM(dv.cantidad * dv.precio_unitario) AS total
+FROM empleados e
+JOIN ventas v
+ON e.id_empleado = v.id_empleado
+JOIN detalle_venta dv
+ON v.id_venta = dv.id_venta
+GROUP BY e.id_empleado
+ORDER BY total DESC
+LIMIT 1;
+
+-- 3. Empleado que menos vendió
+SELECT
+    e.nombre,
+    e.apellido,
+    SUM(dv.cantidad * dv.precio_unitario) AS total
+FROM empleados e
+JOIN ventas v
+ON e.id_empleado = v.id_empleado
+JOIN detalle_venta dv
+ON v.id_venta = dv.id_venta
+GROUP BY e.id_empleado
+ORDER BY total ASC
+LIMIT 1;
+
+-- 4. Día con más ventas
+SELECT
+    fecha,
+    COUNT(*) AS total_ventas
+FROM ventas
+GROUP BY fecha
+ORDER BY total_ventas DESC
+LIMIT 1;
+
+-- 5. Total recaudado por método de pago
+SELECT
+    mp.tipo,
+    SUM(p.monto) AS total
+FROM pagos p
+JOIN metodo_pago mp
+ON p.id_metodo = mp.id_metodo
+GROUP BY mp.tipo;
+
+-- 6. Clientes con más compras
+SELECT
+    c.nombre,
+    c.apellido,
+    COUNT(v.id_venta) AS compras
+FROM clientes c
+JOIN ventas v
+ON c.id_cliente = v.id_cliente
+GROUP BY c.id_cliente
+ORDER BY compras DESC
+LIMIT 10;
+
+-- 7. Productos más vendidos
+SELECT
+    p.descripcion_producto,
+    SUM(dv.cantidad) AS vendidos
+FROM productos p
+JOIN detalle_venta dv
+ON p.id_producto = dv.id_producto
+GROUP BY p.id_producto
+ORDER BY vendidos DESC
+LIMIT 10;
+
+-- 8. Productos menos vendidos
+SELECT
+    p.descripcion_producto,
+    SUM(dv.cantidad) AS vendidos
+FROM productos p
+JOIN detalle_venta dv
+ON p.id_producto = dv.id_producto
+GROUP BY p.id_producto
+ORDER BY vendidos ASC
+LIMIT 10;
+
+-- 9. Ingresos totales del sistema
+SELECT
+    SUM(dv.cantidad * dv.precio_unitario) AS ingresos_totales
+FROM detalle_venta dv;
+
+-- 10. Cantidad total de clientes
+SELECT COUNT(*) AS total_clientes
+FROM clientes;
+
+-- 11. Cantidad total de ventas
+SELECT COUNT(*) AS total_ventas
+FROM ventas;
+
+-- 12. Productos con stock crítico
+SELECT
+    p.descripcion_producto,
+    i.stock
+FROM productos p
+JOIN inventario i
+ON p.id_producto = i.id_producto
+WHERE i.stock < 10;
+
+-- 13. Productos agotados
+SELECT
+    p.descripcion_producto
+FROM productos p
+JOIN inventario i
+ON p.id_producto = i.id_producto
+WHERE i.stock = 0;
+
+-- 14. Clientes que no compran hace tiempo
+SELECT
+    c.nombre,
+    c.apellido,
+    MAX(v.fecha) AS ultima_compra
+FROM clientes c
+JOIN ventas v
+ON c.id_cliente = v.id_cliente
+GROUP BY c.id_cliente
+HAVING MAX(v.fecha) < CURRENT_DATE - INTERVAL '30 days';
+
+-- 15. Ranking de empleados
+SELECT
+    e.nombre,
+    e.apellido,
+    SUM(dv.cantidad * dv.precio_unitario) AS total_vendido,
+    RANK() OVER(
+        ORDER BY SUM(dv.cantidad * dv.precio_unitario) DESC
+    ) AS ranking
+FROM empleados e
+JOIN ventas v
+ON e.id_empleado = v.id_empleado
+JOIN detalle_venta dv
+ON v.id_venta = dv.id_venta
+GROUP BY e.id_empleado;
+
+
+
+-- =========================================================
+-- =========================================================
+--          MÓDULO 2 : VENDEDOR
+-- =========================================================
+-- =========================================================
+
+-- =========================================
+-- VISTA VENDEDOR
+-- =========================================
+
+CREATE OR REPLACE VIEW vista_vendedor_ventas AS
+SELECT
+    v.id_venta,
+    c.nombre || ' ' || c.apellido AS cliente,
+    v.fecha
+FROM ventas v
+JOIN clientes c
+ON v.id_cliente = c.id_cliente;
+
+-- =========================================
+-- 15 CONSULTAS VENDEDOR
+-- =========================================
+
+-- 1. Productos vendidos hoy
+SELECT
+    p.descripcion_producto,
+    SUM(dv.cantidad) AS total
+FROM detalle_venta dv
+JOIN productos p
+ON dv.id_producto = p.id_producto
+JOIN ventas v
+ON dv.id_venta = v.id_venta
+WHERE v.fecha = CURRENT_DATE
+GROUP BY p.descripcion_producto;
+
+-- 2. Ventas realizadas por fecha
+SELECT *
+FROM ventas
+ORDER BY fecha DESC;
+
+-- 3. Clientes atendidos por empleado
+SELECT
+    e.nombre,
+    COUNT(v.id_cliente) AS clientes
+FROM empleados e
+JOIN ventas v
+ON e.id_empleado = v.id_empleado
+GROUP BY e.nombre;
+
+-- 4. Productos vendidos por categoría
+SELECT
+    c.nombre AS categoria,
+    SUM(dv.cantidad) AS vendidos
+FROM categorias c
+JOIN productos p
+ON c.id_categoria = p.id_categoria
+JOIN detalle_venta dv
+ON p.id_producto = dv.id_producto
+GROUP BY categoria;
+
+-- 5. Ventas del último mes
+SELECT *
+FROM ventas
+WHERE fecha >= CURRENT_DATE - INTERVAL '30 days';
+
+-- 6. Clientes frecuentes
+SELECT
+    c.nombre,
+    COUNT(v.id_venta) AS compras
+FROM clientes c
+JOIN ventas v
+ON c.id_cliente = v.id_cliente
+GROUP BY c.nombre
+ORDER BY compras DESC;
+
+-- 7. Productos más pedidos
+SELECT
+    p.descripcion_producto,
+    COUNT(*) AS veces_vendido
+FROM productos p
+JOIN detalle_venta dv
+ON p.id_producto = dv.id_producto
+GROUP BY p.descripcion_producto
+ORDER BY veces_vendido DESC;
+
+-- 8. Productos nunca vendidos
+SELECT
+    descripcion_producto
+FROM productos
+WHERE id_producto NOT IN(
+    SELECT id_producto
+    FROM detalle_venta
+);
+
+-- 9. Ventas realizadas por empleado
+SELECT
+    e.nombre,
+    COUNT(v.id_venta) AS total_ventas
+FROM empleados e
+JOIN ventas v
+ON e.id_empleado = v.id_empleado
+GROUP BY e.nombre;
+
+-- 10. Promedio de ventas por día
+SELECT
+    fecha,
+    AVG(dv.cantidad * dv.precio_unitario) AS promedio
+FROM ventas v
+JOIN detalle_venta dv
+ON v.id_venta = dv.id_venta
+GROUP BY fecha;
+
+-- 11. Venta más alta registrada
+SELECT
+    v.id_venta,
+    SUM(dv.cantidad * dv.precio_unitario) AS total
+FROM ventas v
+JOIN detalle_venta dv
+ON v.id_venta = dv.id_venta
+GROUP BY v.id_venta
+ORDER BY total DESC
+LIMIT 1;
+
+-- 12. Venta más baja registrada
+SELECT
+    v.id_venta,
+    SUM(dv.cantidad * dv.precio_unitario) AS total
+FROM ventas v
+JOIN detalle_venta dv
+ON v.id_venta = dv.id_venta
+GROUP BY v.id_venta
+ORDER BY total ASC
+LIMIT 1;
+
+-- 13. Productos vendidos por empleado
+SELECT
+    e.nombre,
+    p.descripcion_producto,
+    SUM(dv.cantidad) AS vendidos
+FROM empleados e
+JOIN ventas v
+ON e.id_empleado = v.id_empleado
+JOIN detalle_venta dv
+ON v.id_venta = dv.id_venta
+JOIN productos p
+ON dv.id_producto = p.id_producto
+GROUP BY e.nombre, p.descripcion_producto;
+
+-- 14. Clientes que compraron bebidas
+SELECT DISTINCT
+    c.nombre,
+    c.apellido
+FROM clientes c
+JOIN ventas v
+ON c.id_cliente = v.id_cliente
+JOIN detalle_venta dv
+ON v.id_venta = dv.id_venta
+JOIN productos p
+ON dv.id_producto = p.id_producto
+WHERE p.id_categoria = 1;
+
+-- 15. Cantidad vendida por producto
+SELECT
+    p.descripcion_producto,
+    SUM(dv.cantidad) AS total
+FROM productos p
+JOIN detalle_venta dv
+ON p.id_producto = dv.id_producto
+GROUP BY p.descripcion_producto;
+
+
+
+-- =========================================================
+-- =========================================================
+--          MÓDULO 3 : CAJERO
+-- =========================================================
+-- =========================================================
+
+-- =========================================
+-- VISTA CAJERO
+-- =========================================
+
+CREATE OR REPLACE VIEW vista_cajero_pagos AS
+SELECT
+    p.id_pago,
+    v.id_venta,
+    mp.tipo AS metodo_pago,
+    p.monto,
+    v.fecha
+FROM pagos p
+JOIN ventas v
+ON p.id_venta = v.id_venta
+JOIN metodo_pago mp
+ON p.id_metodo = mp.id_metodo;
+
+-- =========================================
+-- 15 CONSULTAS CAJERO
+-- =========================================
+
+-- 1. Total cobrado por día
+SELECT
+    v.fecha,
+    SUM(p.monto) AS total_cobrado
+FROM pagos p
+JOIN ventas v
+ON p.id_venta = v.id_venta
+GROUP BY v.fecha;
+
+-- 2. Método de pago más utilizado
+SELECT
+    mp.tipo,
+    COUNT(*) AS veces_usado
+FROM pagos p
+JOIN metodo_pago mp
+ON p.id_metodo = mp.id_metodo
+GROUP BY mp.tipo
+ORDER BY veces_usado DESC;
+
+-- 3. Total cobrado por método de pago
+SELECT
+    mp.tipo,
+    SUM(p.monto) AS total
+FROM pagos p
+JOIN metodo_pago mp
+ON p.id_metodo = mp.id_metodo
+GROUP BY mp.tipo;
+
+-- 4. Ventas pagadas con efectivo
+SELECT
+    v.id_venta,
+    p.monto
+FROM pagos p
+JOIN ventas v
+ON p.id_venta = v.id_venta
+WHERE p.id_metodo = 1;
+
+-- 5. Ventas pagadas con tarjeta
+SELECT
+    v.id_venta,
+    p.monto
+FROM pagos p
+JOIN ventas v
+ON p.id_venta = v.id_venta
+WHERE p.id_metodo IN (3,4);
+
+-- 6. Promedio de pagos realizados
+SELECT
+    ROUND(AVG(monto),2) AS promedio_pago
+FROM pagos;
+
+-- 7. Pago más alto registrado
+SELECT *
+FROM pagos
+ORDER BY monto DESC
+LIMIT 1;
+
+-- 8. Pago más bajo registrado
+SELECT *
+FROM pagos
+ORDER BY monto ASC
+LIMIT 1;
+
+-- 9. Ventas sin pago registrado
+SELECT
+    v.id_venta,
+    v.fecha
+FROM ventas v
+LEFT JOIN pagos p
+ON v.id_venta = p.id_venta
+WHERE p.id_pago IS NULL;
+
+-- 10. Cantidad de pagos realizados
+SELECT
+    COUNT(*) AS total_pagos
+FROM pagos;
+
+-- 11. Recaudación total del sistema
+SELECT
+    SUM(monto) AS total_recaudado
+FROM pagos;
+
+-- 12. Recaudación mensual
+SELECT
+    TO_CHAR(v.fecha,'YYYY-MM') AS mes,
+    SUM(p.monto) AS total
+FROM pagos p
+JOIN ventas v
+ON p.id_venta = v.id_venta
+GROUP BY mes
+ORDER BY mes;
+
+-- 13. Cantidad de ventas por método de pago
+SELECT
+    mp.tipo,
+    COUNT(v.id_venta) AS ventas
+FROM metodo_pago mp
+JOIN pagos p
+ON mp.id_metodo = p.id_metodo
+JOIN ventas v
+ON p.id_venta = v.id_venta
+GROUP BY mp.tipo;
+
+-- 14. Pagos realizados hoy
+SELECT *
+FROM pagos p
+JOIN ventas v
+ON p.id_venta = v.id_venta
+WHERE v.fecha = CURRENT_DATE;
+
+-- 15. Clientes que realizaron mayores pagos
+SELECT
+    c.nombre,
+    c.apellido,
+    SUM(p.monto) AS total_pagado
+FROM clientes c
+JOIN ventas v
+ON c.id_cliente = v.id_cliente
+JOIN pagos p
+ON v.id_venta = p.id_venta
+GROUP BY c.id_cliente
+ORDER BY total_pagado DESC
+LIMIT 10;
+
+
+
+-- =========================================================
+-- =========================================================
+--          MÓDULO 4 : ALMACÉN
+-- =========================================================
+-- =========================================================
+
+-- =========================================
+-- VISTA ALMACÉN
+-- =========================================
+
+CREATE OR REPLACE VIEW vista_almacen_stock AS
+SELECT
+    p.codigo_producto,
+    p.descripcion_producto,
+    c.nombre AS categoria,
+    i.stock
+FROM productos p
+JOIN categorias c
+ON p.id_categoria = c.id_categoria
+JOIN inventario i
+ON p.id_producto = i.id_producto;
+
+-- =========================================
+-- 15 CONSULTAS ALMACÉN
+-- =========================================
+
+-- 1. Productos con stock crítico
+SELECT
+    p.descripcion_producto,
+    i.stock
+FROM productos p
+JOIN inventario i
+ON p.id_producto = i.id_producto
+WHERE i.stock < 10;
+
+-- 2. Productos agotados
+SELECT
+    p.descripcion_producto
+FROM productos p
+JOIN inventario i
+ON p.id_producto = i.id_producto
+WHERE i.stock = 0;
+
+-- 3. Productos con mayor stock
+SELECT
+    p.descripcion_producto,
+    i.stock
+FROM productos p
+JOIN inventario i
+ON p.id_producto = i.id_producto
+ORDER BY i.stock DESC
+LIMIT 10;
+
+-- 4. Productos con menor stock
+SELECT
+    p.descripcion_producto,
+    i.stock
+FROM productos p
+JOIN inventario i
+ON p.id_producto = i.id_producto
+ORDER BY i.stock ASC
+LIMIT 10;
+
+-- 5. Stock total del inventario
+SELECT
+    SUM(stock) AS stock_total
+FROM inventario;
+
+-- 6. Cantidad de productos registrados
+SELECT
+    COUNT(*) AS total_productos
+FROM productos;
+
+-- 7. Productos por categoría
+SELECT
+    c.nombre AS categoria,
+    COUNT(p.id_producto) AS cantidad
+FROM categorias c
+JOIN productos p
+ON c.id_categoria = p.id_categoria
+GROUP BY c.nombre;
+
+-- 8. Productos nunca vendidos
+SELECT
+    descripcion_producto
+FROM productos
+WHERE id_producto NOT IN (
+    SELECT id_producto
+    FROM detalle_venta
+);
+
+-- 9. Productos más vendidos
+SELECT
+    p.descripcion_producto,
+    SUM(dv.cantidad) AS vendidos
+FROM productos p
+JOIN detalle_venta dv
+ON p.id_producto = dv.id_producto
+GROUP BY p.descripcion_producto
+ORDER BY vendidos DESC
+LIMIT 10;
+
+-- 10. Productos menos vendidos
+SELECT
+    p.descripcion_producto,
+    SUM(dv.cantidad) AS vendidos
+FROM productos p
+JOIN detalle_venta dv
+ON p.id_producto = dv.id_producto
+GROUP BY p.descripcion_producto
+ORDER BY vendidos ASC
+LIMIT 10;
+
+-- 11. Valor total del inventario
+SELECT
+    SUM(i.stock * p.precio) AS valor_total
+FROM inventario i
+JOIN productos p
+ON i.id_producto = p.id_producto;
+
+-- 12. Productos con precio mayor a 20
+SELECT
+    descripcion_producto,
+    precio
+FROM productos
+WHERE precio > 20;
+
+-- 13. Productos ordenados por categoría
+SELECT
+    c.nombre AS categoria,
+    p.descripcion_producto
+FROM categorias c
+JOIN productos p
+ON c.id_categoria = p.id_categoria
+ORDER BY categoria;
+
+-- 14. Productos comprados a proveedores
+SELECT
+    p.descripcion_producto,
+    pr.nombre AS proveedor
+FROM productos p
+JOIN detalle_compra dc
+ON p.id_producto = dc.id_producto
+JOIN compras c
+ON dc.id_compra = c.id_compra
+JOIN proveedores pr
+ON c.id_proveedor = pr.id_proveedor;
+
+-- 15. Promedio de stock por producto
+SELECT
+    ROUND(AVG(stock),2) AS promedio_stock
+FROM inventario;
+
+-- Stck y vendidos
+--Productos que bajarán de stock pronto
+SELECT
+    p.descripcion_producto,
+    i.stock,
+    SUM(dv.cantidad) AS vendidos
+FROM productos p
+INNER JOIN inventario i
+ON p.id_producto = i.id_producto
+INNER JOIN detalle_venta dv
+ON p.id_producto = dv.id_producto
+GROUP BY p.descripcion_producto, i.stock
+HAVING i.stock < SUM(dv.cantidad)
+ORDER BY vendidos DESC;
